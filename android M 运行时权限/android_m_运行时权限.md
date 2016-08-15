@@ -78,6 +78,60 @@ android小组也知道这事儿。7年了！权限系统终于被重新设计了
 
 只有这些权限会在第一次需要的时候弹出提示框，同一组的任何一个权限被授权了，其他权限也自动被授权。例如，一旦WRITE_CONTACTS被授权了，app也有READ_CONTACTS和GET_ACCOUNTS了。
 
+## 特殊权限
+自己在多项目的时候遇到了这样一个问题，被坑了很久，其实挺简单的只是自己之前不了解，所以这里也写出来做个提醒。
+这类权限主要是指：<br>
+
+	1. SYSTEM_ALERT_WINDOW，设置悬浮窗，进行一些黑科技
+	
+	2.WRITE_SETTINGS 修改系统设置
+	
+	
+这两个权限不能像其他Dangerous permission一样去处理，需要使用`startActivityForResult`来启动一个系统设置的fragment
+例如需要修改系统设置：
+
+		if (!Settings.System.canWrite(activity)) {
+                AlertDialog.Builder builder = new AlertDialog.Builder(activity);
+                builder.setTitle("信息确认");
+                builder.setMessage("需要授权修改系统设置的权限");
+                builder.setPositiveButton("确定", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        Intent intent = new Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS);
+                        intent.setData(Uri.parse("package:" + activity.getPackageName()));
+                        activity.startActivityForResult(intent，requestCode);
+
+                    }
+                });
+                builder.setNegativeButton("取消", new DialogInterface.OnClickListener() {
+
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        dialog.dismiss();
+                    }
+                });
+                AlertDialog dialog = builder.create();
+                dialog.show();
+            }
+            
+            
+ 他会打开一个该应用请求修改系统设置的页面：
+ ![icon](./device-2016-08-15-102724.png)
+ 
+ 操作完之后在`onActivityResult`中处理结果即可
+ 
+ 
+ 	@Override
+	protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+    super.onActivityResult(requestCode, resultCode, data);
+    if (requestCode == REQUEST_CODE) {
+        if (Settings.System.canWrite(this)) {
+          Log.i(LOGTAG, "onActivityResult granted");
+        }
+    }
+	}
+ 
+
 
 ## 让你的app支持新运行时权限
 
