@@ -110,7 +110,120 @@
     }
 
 
-这样我们就可以获取到每一个页面中的view的点击事件，实现自动埋点、无差别统计。
+这样我们就可以获取到每一个页面中的view的点击事件，实现自动埋点、无差别统计。虽然onClick()比较主流但是不排除有些地方我们会使用`onTouch()`的方式为view处理响应事件，这个上面的方式就统计不到了。为了支持ontouch的统计，就需要像`view.hasOnClickListeners()`一样去判断该view是否设置了onTouchListener,但android并没有提供这样的API只能自己想办法。
+先看一下`setOnTouchListener()`
+
+	public void setOnTouchListener(OnTouchListener l) {
+        getListenerInfo().mOnTouchListener = l;
+    }
+    
+最终信息保存在`ListenerInfo`中的`mOnTouchListener`意味着我们只要拿到ListenerInfo.mOnTouchListener看看它有没有值就好了
+    static class ListenerInfo {
+        /**
+         * Listener used to dispatch focus change events.
+         * This field should be made private, so it is hidden from the SDK.
+         * {@hide}
+         */
+        protected OnFocusChangeListener mOnFocusChangeListener;
+
+        /**
+         * Listeners for layout change events.
+         */
+        private ArrayList<OnLayoutChangeListener> mOnLayoutChangeListeners;
+
+        protected OnScrollChangeListener mOnScrollChangeListener;
+
+        /**
+         * Listeners for attach events.
+         */
+        private CopyOnWriteArrayList<OnAttachStateChangeListener> mOnAttachStateChangeListeners;
+
+        /**
+         * Listener used to dispatch click events.
+         * This field should be made private, so it is hidden from the SDK.
+         * {@hide}
+         */
+        public OnClickListener mOnClickListener;
+
+        /**
+         * Listener used to dispatch long click events.
+         * This field should be made private, so it is hidden from the SDK.
+         * {@hide}
+         */
+        protected OnLongClickListener mOnLongClickListener;
+
+        /**
+         * Listener used to build the context menu.
+         * This field should be made private, so it is hidden from the SDK.
+         * {@hide}
+         */
+        protected OnCreateContextMenuListener mOnCreateContextMenuListener;
+
+        private OnKeyListener mOnKeyListener;
+
+        private OnTouchListener mOnTouchListener;
+
+        private OnHoverListener mOnHoverListener;
+
+        private OnGenericMotionListener mOnGenericMotionListener;
+
+        private OnDragListener mOnDragListener;
+
+        private OnSystemUiVisibilityChangeListener mOnSystemUiVisibilityChangeListener;
+
+        OnApplyWindowInsetsListener mOnApplyWindowInsetsListener;
+    }
+    
+    
+ 这是一个View中的一个静态内部类，而mOnTouchListener是一个private的类成员变量。所以第一时间想到用反射去做这件事，集体代码如下：
+ 
+ 	    private boolean hasOnTouchListener(View view) {
+        boolean result = false;
+        Field listenerInfoField = null;
+        try {
+            listenerInfoField = Class.forName("android.view.View").getDeclaredField("mListenerInfo");
+            if (listenerInfoField != null) {
+                listenerInfoField.setAccessible(true);
+            }
+            Object myLiObject = null;
+            myLiObject = listenerInfoField.get(view);
+
+            // get the field mOnClickListener, that holds the listener and cast it to a listener
+            Field listenerField = null;
+            listenerField = Class.forName("android.view.View$ListenerInfo").getDeclaredField("mOnTouchListener");
+            if (listenerField != null && myLiObject != null) {
+                listenerField.setAccessible(true);
+                View.OnTouchListener myListener = (View.OnTouchListener) listenerField.get(myLiObject);
+                if (myListener != null) {
+                    return true;
+                }
+            }
+        } catch (NoSuchFieldException e) {
+            e.printStackTrace();
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+        } catch (IllegalAccessException e) {
+            e.printStackTrace();
+        }
+
+        return result;
+    }
+
+最后在`dispatchTouchEvent`中多加一条判断：
+
+	 @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        if (ev.getAction() == MotionEvent.ACTION_UP) {
+            View view = searchClickView(findViewById(android.R.id.content), ev);
+            if (view != null && (view.hasOnClickListeners())|| hasOnTouchListener(view)) {
+                *****记录对应的log******
+            }
+        }
+        return super.dispatchTouchEvent(ev);
+    }
+    
+** 这样我们就可以同时统计onClick 和 onTouch 事件，让统计数据更加全面。**
+
 
 ## android中实现H5页面的自动埋点
 现在大多数的APP都是混合型的，H5是必不可少的。为了尽可能用统一规则来收集数据的同时不去影响H5团队的开发，不用他们去通过代码埋点，所以就希望数据的收集对H5是透明、无感的。经过研究通过注入JS的方式是可以做到。
