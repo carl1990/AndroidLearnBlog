@@ -17,10 +17,10 @@
 ![Mou icon](./resources/2.png)
 
 在代码中`Transform`是一个虚类
-	
-	public abstract class Transform {
-    	public Transform() {
-    	}
+```java
+public abstract class Transform {
+	public Transform() {
+   	}
 
     	public abstract String getName();
 
@@ -72,15 +72,16 @@
     	public boolean isCacheable() {
         	return false;
     	}
-	}
+}
+```
 看到函数`transform`,我们还没有具体实现这个函数，这个函数就是具体如何处理输入和输出。`getScopes`函数定义了输入范围可以是整个项目所有类，也可以是自己项目中的类。
 
 
 ### 实现自定义Transform
 
 我们在插件项目中(如何实现gradle插件请看另一篇[文章](https://github.com/carl1990/AndroidLearnBlog/tree/master/gralde%20%E6%8F%92%E4%BB%B6))集成Transform类实现transform方法
-
-	    @Override
+```groovy
+    @Override
     void transform(TransformInvocation transformInvocation) throws TransformException, InterruptedException, IOException {
         this.transform(transformInvocation.getContext(), transformInvocation.getInputs(), transformInvocation.getReferencedInputs(), transformInvocation.getOutputProvider(), transformInvocation.isIncremental());
         //开始计算消耗的时间
@@ -150,15 +151,16 @@
         Logger.info("||=======================================================================================================")
 
     }
+```    
  在这个方法中我们分别遍历了jar包中的class文件和目录中的class文件，并查找到我们想要修改的类，对他进行读写、修改操作，也就是上文提到的 输入-->处理-->输出操作，在此期间所有的输入线相关信息由`TransformInput`提供，输出相关信息由`TransformOutputProvider`提供。具体的修改操作我将会在下一章节中讲到。
 
 ### Transform的使用
 开始的时候我们就讲到Transform需要配合gradle插件使用，其实使用起来很简单，只需要把它注册在Plugin中就好了，在自定义的Plugin中的apply方法中：
-
-	def android = project.extensions.getByType(AppExtension)
-   	MyTransform myTransform = new MyTransform()
-    android.registerTransform(myTransform)
-    
+```groovy
+def android = project.extensions.getByType(AppExtension)
+MyTransform myTransform = new MyTransform()
+android.registerTransform(myTransform)
+```
    即可注册上该Transform
    
    
@@ -196,8 +198,7 @@ ASM的处理过程也是一个典型的生产者和消费者模式，这点比�
 在上面Transform章节中我们通过遍历相应的class文件，然后对其进行读取转换为字节流
 
 ```java
-
-	    private static File modifyClassFile(File dir, File classFile, File tempDir) {
+private static File modifyClassFile(File dir, File classFile, File tempDir) {
         File modified = null
         try {
         	//路径转换将 xxx/xxx/xxx -> xxx.xxx.xxx  并且去掉后缀.class
@@ -216,7 +217,7 @@ ASM的处理过程也是一个典型的生产者和消费者模式，这点比�
             e.printStackTrace()
         }
         return modified
-    	}
+}
     	
 ```
     	
@@ -224,7 +225,7 @@ ASM的处理过程也是一个典型的生产者和消费者模式，这点比�
 
 ```java
 
-	  static byte[] modifyClass(byte[] srcByteCode) {
+static byte[] modifyClass(byte[] srcByteCode) {
         ClassWriter classWriter = new ClassWriter(ClassWriter.COMPUTE_MAXS);
         ClassVisitor classVisitor = new CarlClassVisitor(classWriter);
         ClassReader classReader = new ClassReader(srcByteCode);
@@ -252,7 +253,7 @@ EXPAND_FRAMES 不再压缩frames
 
 ```java
 
-	@Override
+    @Override
     public MethodVisitor visitMethod(int access, String name, String desc, String signature, String[] exceptions) {
         MethodVisitor methodVisitor = cv.visitMethod(access, name, desc, signature, exceptions);
         MethodVisitor adapter = null;
@@ -283,7 +284,7 @@ EXPAND_FRAMES 不再压缩frames
  
  ```java
  
- 		public static boolean isMatchingClass(String className, String[] interfaces) {
+ public static boolean isMatchingClass(String className, String[] interfaces) {
         boolean isMeetClassCondition = isMatchingInterfaces(interfaces, "android/view/View$OnClickListener");
         //剔除掉以android开头的类，即系统类，以避免出现不可预测的bug
         if (className.startsWith("android")) {
@@ -324,7 +325,7 @@ EXPAND_FRAMES 不再压缩frames
 
 ```java
 
-	static MethodVisitor getMethodVisitor(String[] interfaces, String className, String superName,
+static MethodVisitor getMethodVisitor(String[] interfaces, String className, String superName,
                                           MethodVisitor methodVisitor, int access, String name, String desc) {
         MethodVisitor adapter = null;
 
@@ -375,6 +376,5 @@ PS:由于会遍历类和对类进行操作，这样做的后果之一就是会�
 
 
 好了，到这里我们就完成了借助Gradel transform 和 ASM 实现了android平台在编译期间修改Class的方式实现AOP编程，希望你能都利用它完成更多有意思的事情。
-
 
 [demo](https://github.com/carl1990/ASMTest)地址
