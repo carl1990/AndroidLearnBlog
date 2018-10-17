@@ -57,6 +57,8 @@ Broadcast<br>
 将其设置到相应的view上，此时点击view就会执行相应的跳转。
 
 ### 坑
+
+#### 坑一：通知栏点击无法收起
 后面由于在点击RemoteViews上的视图的时候系统跳转的同时，更新视图，所以之前构建的打开的Activity的方法就无法做到了，此时只好通过构建广播的方式来处理跳转和视图更新
 
 	Intent intent = null;
@@ -123,6 +125,75 @@ Broadcast<br>
  	
  这样就会在点击的时候响应处理的同时自动收起通知栏
  
- 
+#### 坑二：pendingIntent 设置的Extra数据数据收不到
+当我给不同view设置点击事件的时候，创建了同一个intent,根据view id不同向intent中设置数据：
+
+```java
+    private PendingIntent getPendingIntent(Context context, int resID) {
+        Intent intent = null;
+        intent = new Intent("COM_YMM_CONSIGNOR_NOTIFY_ACTION");
+        switch (resID) {
+            case R.id.order_layout:
+                intent.putExtra("id", NotificationData.NOTIFICATION_TYPE_ORDER);
+
+                break;
+            case R.id.chat_layout:
+                intent.putExtra("id", NotificationData.NOTIFICATION_TYPE_CHAT);
+                break;
+            case R.id.cargo_layout:
+                intent.putExtra("id", NotificationData.NOTIFICATION_TYPE_CARGO);
+                break;
+        }
+        PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_CANCEL_CURRENT);
+        return pendingIntent;
+    }
+```
+
+然而我点击不同事件的时候在receiver中收到的id都是一样的，导致bug,后来研究了官方文档以及PenddingIntent的flag 
+
+在设定PendingIntent时第四个参数flag值时，一定要细心理解：
+
+* FLAG_CANCEL_CURRENT:如果当前系统中已经存在一个相同的PendingIntent对象，那么就将先将已有的PendingIntent取消，然后重新生成一个PendingIntent对象。
+* FLAG_NO_CREATE:如果当前系统中不存在相同的PendingIntent对象，系统将不会创建该PendingIntent对象而是直接返回null。
+*FLAG_ONE_SHOT:该PendingIntent只作用一次。在该PendingIntent对象通过send()方法触发过后，PendingIntent将自动调用cancel()进行销毁，那么如果你再调用send()方法的话，系统将会返回一个SendIntentException。
+* FLAG_UPDATE_CURRENT:如果系统中有一个和你描述的PendingIntent对等的PendingInent，那么系统将使用该PendingIntent对象，但是会使用新的Intent来更新之前PendingIntent中的Intent对象数据，例如更新Intent中的Extras。
+
+当发送两个包含相同的PendingIntent的Notification，发现其中一个可以点击触发，第一个点击没有任何反应。
+创建一个PendingIntent对象，都是通过getActivity、getBroadcast、getService方法来获取的。如果传递给getXXX方法的Intent对象的Action是相同的，Data也是相同的，Categories也是相同的，Components也是相同的，Flags也是相同的），如果之前获取的PendingIntent对象还有效的话，那么后获取到的PendingItent并不是一个新创建的对象，而是对前一个对象的引用。
+
+如果我们只是想通过设置不同的Extra来生成不同的PendingIntent对象是行不通的，因为PendingIntent对象由系统持有，并且系统只通过刚才在上面提到的几个要素来判断PendingIntent对象是否是相同的，那么如果我们想在每次更新PendingIntent对象的话，怎么做呢？
+
+1. 在调用getXXX方法之前，先调用NotificationManager.cancel(notifyId)方法，将之前发送的PendingIntent对象从系统中移除
+2. 也可以在调用getXXX方法时，将第二参数RequestCode设置成不同的值，这样每次就会创建新的PendingIntent对象
+3. 为每一个点击事件生成不同的Intent
+```java
+
+   		private static PendingIntent getPendingIntent(Context context, int resID) {
+        switch (resID) {
+            case 1:
+                Intent intent = new Intent("COM_YMM_CONSIGNOR_NOTIFY_ACTION_ORDER");
+                PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_CANCEL_CURRENT);
+
+                return pendingIntent;
+            case 2:
+                Intent intent2 = new Intent("COM_YMM_CONSIGNOR_NOTIFY_ACTION_CHAT");
+                PendingIntent pendingIntent2 = PendingIntent.getBroadcast(context, 0, intent2, PendingIntent.FLAG_CANCEL_CURRENT);
+                return pendingIntent2;
+            case 3:
+                Intent intent3 = new Intent("COM_YMM_CONSIGNOR_NOTIFY_ACTION_CHAT");
+                PendingIntent pendingIntent3 = PendingIntent.getBroadcast(context, 0, intent3, PendingIntent.FLAG_CANCEL_CURRENT);
+                return pendingIntent3;
+            default:
+                return null;
+        }
+        }
+ #### 坑三:点击没反应
+ 1. 对于getActivity，返回的PendingIntent递交给别的应用程序执行，这样就脱离了原始应用程序所在的task栈。
+getActivity最后的flag参数要设置成`Intent.FLAG_ACTIVITY_NEW_TASK`，才能成功启动PendingIntent中包含的activity。
+2. 对于broadcast而言，因为PendingIntent是递交给别的应用程序执行，所以接收Broadcast的receiver必须设置**“export=true”**，才能接收到广播。但是有些手机上，经过测试即使“export=false”也还是能接收到广播，可能是OEM厂商对系统有所修改。但是建议最好设置成“export=true”。
+3. 这个最恶心的问题也是坑了好久的，在某些机型(比如我用的`VIVO NEX`)会有严格的权限管理，禁止**后台弹出界面**,所以需要去打开相应的权限之后点击才能打开应用相应的页面。<br>
+![MacDown logo](./4.png)
+
+
 
 	
