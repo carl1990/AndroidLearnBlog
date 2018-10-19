@@ -196,4 +196,119 @@ getActivity最后的flag参数要设置成`Intent.FLAG_ACTIVITY_NEW_TASK`，才�
 
 
 
+#### 坑四：通知栏文字颜色在部分机型通知栏为暗色的时候看不清楚
+	
+先看一下在不同手机上的表现：
+ ![MacDown logo](./5.jpg)
+ 在黑色上面的文字显示不清楚，但是别人家的应用在不同在亮色背景和暗色背景上表现的都很好，所以。。。
+ 解决方案：尝试获取通知栏的主题颜色看看，根据该颜色去动态改变设置通知栏中文字的颜色，代码如下：
+ 
+  	 
+  	public static boolean isDarkNotificationTheme(Context context) {
+        return !isSimilarColor(Color.BLACK, getNotificationColor(context));
+    }
+
+    /**
+     * 获取通知栏颜色
+     *
+     * @param context
+     * @return
+     */
+    public static int getNotificationColor(Context context) {
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(context);
+        Notification notification = builder.build();
+        int layoutId = notification.contentView.getLayoutId();
+        ViewGroup viewGroup = (ViewGroup) LayoutInflater.from(context).inflate(layoutId, null, false);
+        if (viewGroup.findViewById(android.R.id.title) != null) {
+            return ((TextView) viewGroup.findViewById(android.R.id.title)).getCurrentTextColor();
+        }
+        return findColor(viewGroup);
+    }
+
+    private static boolean isSimilarColor(int baseColor, int color) {
+        int simpleBaseColor = baseColor | 0xff000000;
+        int simpleColor = color | 0xff000000;
+        int baseRed = Color.red(simpleBaseColor) - Color.red(simpleColor);
+        int baseGreen = Color.green(simpleBaseColor) - Color.green(simpleColor);
+        int baseBlue = Color.blue(simpleBaseColor) - Color.blue(simpleColor);
+        double value = Math.sqrt(baseRed * baseRed + baseGreen * baseGreen + baseBlue * baseBlue);
+        if (value < 180.0) {
+            return true;
+        }
+        return false;
+    }
+
+
+    private static int findColor(ViewGroup viewGroupSource) {
+        int color = Color.TRANSPARENT;
+        LinkedList<ViewGroup> viewGroups = new LinkedList<>();
+        viewGroups.add(viewGroupSource);
+        while (viewGroups.size() > 0) {
+            ViewGroup viewGroup1 = viewGroups.getFirst();
+            for (int i = 0; i < viewGroup1.getChildCount(); i++) {
+                if (viewGroup1.getChildAt(i) instanceof ViewGroup) {
+                    viewGroups.add((ViewGroup) viewGroup1.getChildAt(i));
+                } else if (viewGroup1.getChildAt(i) instanceof TextView) {
+                    if (((TextView) viewGroup1.getChildAt(i)).getCurrentTextColor() != -1) {
+                        color = ((TextView) viewGroup1.getChildAt(i)).getCurrentTextColor();
+                    }
+                }
+            }
+            viewGroups.remove(viewGroup1);
+        }
+        return color;
+    }
+ 
+
+然后在通知栏的remoteView中设置相应的颜色
+
+	mRemoteViews.setTextColor(R.id.notification_time, isDarkNotificationTheme(ContextUtil.get()) == true ? Color.WHITE : Color.BLACK);
+	
+	
+再来验证一下效果：
+![MacDown logo](./6.jpg)
+![MacDown logo](./7.jpg)
+
+####  坑五，在某些手机上当按home键之后通过通知栏进入应用会比较慢
+一开始我们测试了一些手机发现在大多数手机上不存在这样的问题，打开还是很快的，只有在oppo的手机上会存在这样的问题，本来打算不解决了但是一是QA的较真下一是觉得这里面肯定有android系统机制的问题想了解这个问题，所以就研究了一下发现：
+在谷歌的 Android API Guides 中，特意提醒开发者不要在后台启动 activity，包括在 Service 和 BroadcastReceiver 中，这样的设计是为了避免在用户毫不知情的情况下突然中断用户正在进行的工作，在  [http://developer.android.com/guide/practices/seamlessness.html#interrupt](http://developer.android.com/guide/practices/seamlessness.html#interrupt) 中有如下解释：
+
+**That is, don't call startActivity() from BroadcastReceivers or Services running in the background. Doing so will interrupt whatever application is currently running, and result in an annoyed user. Perhaps even worse, your Activity may become a "keystroke bandit" and receive some of the input the user was in the middle of providing to the previous Activity. Depending on what your application does, this could be bad news.**
+
+即便如此，手机厂商的开发者们在开发基于系统级的应用的时候，可能仍然需要有从 Service 或 BroadcastReceiver 中 startActivity 的需求，往往这样的前提是连这样的 Service 或 BroadcastReceiver 也是由用户的某些操作而触发的，Service 或 BroadcastReceiver 只是充当了即将启动 activity 之前的一些代理参数检查工作以便决定是否需要 start 该 activity。
+
+除非是上述笔者所述的特殊情况，应用开发者都应该遵循 “不要从后台启动 Activity”准则。
+
+一个需要特别注意的问题是，特例中所述的情况还会遇到一个问题，**就是当通过 home 键将当前 activity 置于后台时，任何在后台startActivity 的操作都将会延迟 5 秒**，除非该应用获取了 **"android.permission.STOP_APP_SWITCHES"** 权限。
+
+关于延迟 5 秒的操作在 com.android.server.am.ActivityManagerService 中的 stopAppSwitches() 方法中，系统级的应用当获取了 "android.permission.STOP_APP_SWITCHES" 后将不会调用到这个方法来延迟通过后台启动 activity 的操作，事实上 android 原生的 Phone 应用就是这样的情况，它是一个获取了"android.permission.STOP_APP_SWITCHES" 权限的系统级应用，当有来电时，一个从后台启动的 activity 将突然出现在用户的面前，警醒用户有新的来电，这样的设计是合理的。 
+
+所以，当你需要开发类似 Phone 这样的应用时，需要做如下工作：
+
+1. root 你的手机；
+2. 在 AndroidManifest.xml 中添加 "android.permission.STOP_APP_SWITCHES"  用户权限；
+3. 将你开发的应用程序 push 到手机的 /system/app 目录中。
+
+同时在stackoverflow上也提供了一个方法用于解决延迟5s启动的方式
+
+So instead of this
+
+	Intent intent = new Intent(context, A.class);
+    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+   	context.startActivity(intent);
+
+just do this
+
+	Intent intent = new Intent(context, A.class);
+    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+    PendingIntent pendingIntent =
+                        PendingIntent.getActivity(context, 0, intent, 0);
+    try {
+          pendingIntent.send();
+     } catch (PendingIntent.CanceledException e) {
+          e.printStackTrace();
+    }
+
+经验证，确实有效
+
 	
