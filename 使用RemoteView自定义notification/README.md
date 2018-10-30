@@ -167,8 +167,8 @@ Broadcast<br>
 2. 也可以在调用getXXX方法时，将第二参数RequestCode设置成不同的值，这样每次就会创建新的PendingIntent对象
 3. 为每一个点击事件生成不同的Intent
 	
-	```	
-    private static PendingIntent getPendingIntent(Context context, int resID) {
+	
+    	private static PendingIntent getPendingIntent(Context context, int resID) {
         switch (resID) {
             case 1:
                 Intent intent = new 	Intent("COM_YMM_CONSIGNOR_NOTIFY_ACTION_ORDER");
@@ -185,10 +185,7 @@ Broadcast<br>
             default:
                 return null;
         }
-    }
-```
-
- 	
+    	}
 
 #### 坑三:点击没反应
  1. 对于getActivity，返回的PendingIntent递交给别的应用程序执行，这样就脱离了原始应用程序所在的task栈。
@@ -345,8 +342,8 @@ just do this
 看到问题文发生在 `NotificationManager.notifyAsUser`
 <br>之后去看源码喽，进入源码看到
 
-  ```
-  */
+ 
+  	*/
     public void notifyAsUser(String tag, int id, Notification notification, UserHandle user)
     {
         int[] idOut = new int[1];
@@ -361,8 +358,8 @@ just do this
             }
         }
         fixLegacySmallIcon(notification, pkg);
-        ......
- ```
+     ......
+ 
 这里有一个调用了**`Notification.addFieldsFromContext(mContext, notification);`**
 
  
@@ -415,4 +412,4 @@ moderate size.”**
         }
     }
  
-此处采用的是50次 当没到50次的时候创建一个新的对象，经过测试发送了500次以上没有再发生该崩溃的情况。
+ 此处采用的是50次 当没到50次的时候创建一个新的对象，经过测试发送了500次以上没有再发生该崩溃的情况。
