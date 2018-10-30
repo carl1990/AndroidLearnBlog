@@ -311,4 +311,98 @@ just do this
 
 经验证，确实有效
 
+#### 坑六
+在线上环境的时候从buglg上面看到了一个短如下的错误：
 	
+	#269468 android.os.TransactionTooLargeException
+	data parcel size 576640 bytes
+
+	com.xiwei.logistics.service.NotificationViewHelper.updateNotify(TbsSdkJava)
+	
+具体堆栈如下：
+	
+	1.java.lang.RuntimeException:android.os.TransactionTooLargeException: data parcel size 634184 bytes
+	2 android.app.NotificationManager.notifyAsUser(NotificationManager.java:323)
+	3 ......
+	4 Caused by:
+	5 android.os.TransactionTooLargeException:data parcel size 634184 bytes
+	6 android.os.BinderProxy.transactNative(Native Method)
+	7 android.os.BinderProxy.transact(Binder.java:802)
+	8 	android.app.INotificationManager$Stub$Proxy.enqueueNotificationWithTag(INotificationManager.java:1422)
+	9 android.app.NotificationManager.notifyAsUser(NotificationManager.java:320)
+	10 android.app.NotificationManager.notify(NotificationManager.java:289)
+	11 android.app.NotificationManager.notify(NotificationManager.java:273)	
+看到问题文发生在 `NotificationManager.notifyAsUser`
+<br>之后去看源码喽，进入源码看到
+
+```java 
+  */
+    public void notifyAsUser(String tag, int id, Notification notification, UserHandle user)
+    {
+        int[] idOut = new int[1];
+        INotificationManager service = getService();
+        String pkg = mContext.getPackageName();
+        // Fix the notification as best we can.
+        Notification.addFieldsFromContext(mContext, notification);
+        if (notification.sound != null) {
+            notification.sound = notification.sound.getCanonicalUri();
+            if (StrictMode.vmFileUriExposureEnabled()) {
+                notification.sound.checkFileUriExposed("Notification.sound");
+            }
+        }
+        fixLegacySmallIcon(notification, pkg);
+        ......
+```
+这里有一个调用了**`Notification.addFieldsFromContext(mContext, notification);`**
+
+```java
+    /**
+     * @hide
+     */
+    public static void addFieldsFromContext(ApplicationInfo ai, int userId,
+            Notification notification) {
+        notification.extras.putParcelable(EXTRA_BUILDER_APPLICATION_INFO, ai);
+        notification.extras.putInt(EXTRA_ORIGINATING_USERID, userId);
+    }
+```
+可以看到在这里是往传入的notification的extras数据中添加相应的数据，Extras是一个**Bundle**，熟悉的开发同学可能都知道Bundle的数据大小是有限制的
+
+```
+“The Binder transaction buffer has a limited fixed size, currently 1Mb, which is shared by all 
+transactions in progress for the process. Consequently this exception can be thrown when 
+there are many transactions in progress even when most of the individual transactions are of 
+moderate size.”
+```
+所以问题知道了，我们再来看调用；之前更新notification的时候如下
+
+```
+if (notification != null) {
+    NotificationManager notificationManager = (NotificationManager) ContextUtil.get().getSystemService(Context.NOTIFICATION_SERVICE);
+ 	notificationManager.notify(FOREGROUND_ID, notification);
+}
+```
+一直传入的是同一个notification对象，所以在每次更新通知的时候都是向同一个notification的Bundle添加数据当更新次数过多的时候就会把bundle撑爆了，导致上述问题。
+
+解决方案：更新的notify的时候当达到一定的数量的时候就不要复用该notification对象了， 重新复制创建一个新的对象，代码如下：
+
+```java
+    private void updateNotify() {
+        // FIX bug :  #269468 android.os.TransactionTooLargeException
+        // data parcel size 576640 bytes
+        //
+        //com.xiwei.logistics.service.NotificationViewHelper.updateNotify(TbsSdkJava)
+        updateCount++;
+        if (notification == null) {
+            notification = ForegroundService.notification;
+        }
+        if (updateCount % 50 == 0) {
+            notification = ForegroundService.initNotification(ContextUtil.get());
+        }
+
+        if (notification != null) {
+            NotificationManager notificationManager = (NotificationManager) ContextUtil.get().getSystemService(Context.NOTIFICATION_SERVICE);
+            notificationManager.notify(FOREGROUND_ID, notification);
+        }
+    }
+```
+此处采用的是50次 当没到50次的时候创建一个新的对象，经过测试发送了500次以上没有再发生该崩溃的情况。
