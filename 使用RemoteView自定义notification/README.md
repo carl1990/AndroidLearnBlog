@@ -100,7 +100,7 @@ Broadcast<br>
     
  但是此时出现了一个坑就是：
  **点击了通知之后Notification的Statusbar不会自动收起来了**,无法及时看到页面的跳转，用户体验不是很好，所以只好强制收起**StatusBar**
- 
+
  	public static void collapseStatusBar(Context context) {
         try {
             Object statusBarManager = context.getSystemService("statusbar");
@@ -117,8 +117,9 @@ Broadcast<br>
         }
 
     }
+
     
- 并且在manifeast中添加如下权限：
+并且在manifeast中添加如下权限：
  
  	<uses-permission android:name="android.permission.EXPAND_STATUS_BAR" />
  	
@@ -128,7 +129,6 @@ Broadcast<br>
 #### 坑二：pendingIntent 设置的Extra数据数据收不到
 当我给不同view设置点击事件的时候，创建了同一个intent,根据view id不同向intent中设置数据：
 
-```java
     private PendingIntent getPendingIntent(Context context, int resID) {
         Intent intent = null;
         intent = new Intent("COM_YMM_CONSIGNOR_NOTIFY_ACTION");
@@ -147,7 +147,7 @@ Broadcast<br>
         PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_CANCEL_CURRENT);
         return pendingIntent;
     }
-```
+
 
 然而我点击不同事件的时候在receiver中收到的id都是一样的，导致bug,后来研究了官方文档以及PenddingIntent的flag 
 
@@ -166,33 +166,38 @@ Broadcast<br>
 1. 在调用getXXX方法之前，先调用NotificationManager.cancel(notifyId)方法，将之前发送的PendingIntent对象从系统中移除
 2. 也可以在调用getXXX方法时，将第二参数RequestCode设置成不同的值，这样每次就会创建新的PendingIntent对象
 3. 为每一个点击事件生成不同的Intent
-```java
-
-   		private static PendingIntent getPendingIntent(Context context, int resID) {
+	
+	```	
+    private static PendingIntent getPendingIntent(Context context, int resID) {
         switch (resID) {
             case 1:
-                Intent intent = new Intent("COM_YMM_CONSIGNOR_NOTIFY_ACTION_ORDER");
-                PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 0, intent, PendingIntent.FLAG_CANCEL_CURRENT);
-
+                Intent intent = new 	Intent("COM_YMM_CONSIGNOR_NOTIFY_ACTION_ORDER");
+                PendingIntent pendingIntent = PendingIntent.getBroadcast(context, 0, intent, 		PendingIntent.FLAG_CANCEL_CURRENT);
                 return pendingIntent;
             case 2:
                 Intent intent2 = new Intent("COM_YMM_CONSIGNOR_NOTIFY_ACTION_CHAT");
                 PendingIntent pendingIntent2 = PendingIntent.getBroadcast(context, 0, intent2, PendingIntent.FLAG_CANCEL_CURRENT);
                 return pendingIntent2;
             case 3:
-                Intent intent3 = new Intent("COM_YMM_CONSIGNOR_NOTIFY_ACTION_CHAT");
+                Intent intent3 = new Intent("COM_YMM_CONSIGNOR_NOTIFY_ACTION_CARGO");
                 PendingIntent pendingIntent3 = PendingIntent.getBroadcast(context, 0, intent3, PendingIntent.FLAG_CANCEL_CURRENT);
                 return pendingIntent3;
             default:
                 return null;
         }
-        }
- #### 坑三:点击没反应
+    }
+```
+
+ 	
+
+#### 坑三:点击没反应
  1. 对于getActivity，返回的PendingIntent递交给别的应用程序执行，这样就脱离了原始应用程序所在的task栈。
 getActivity最后的flag参数要设置成`Intent.FLAG_ACTIVITY_NEW_TASK`，才能成功启动PendingIntent中包含的activity。
 2. 对于broadcast而言，因为PendingIntent是递交给别的应用程序执行，所以接收Broadcast的receiver必须设置**“export=true”**，才能接收到广播。但是有些手机上，经过测试即使“export=false”也还是能接收到广播，可能是OEM厂商对系统有所修改。但是建议最好设置成“export=true”。
-3. 这个最恶心的问题也是坑了好久的，在某些机型(比如我用的`VIVO NEX`)会有严格的权限管理，禁止**后台弹出界面**,所以需要去打开相应的权限之后点击才能打开应用相应的页面。<br>
-![MacDown logo](./4.png)
+3. 这个最恶心的问题也是坑了好久的，在某些机型(比如我用的`VIVO NEX`)会有严格的权限管理，禁止**后台弹出界面**,所以需要去打开相应的权限之后点击才能打开应用相应的页面。
+
+<br>
+![](./4.png)
 
 
 
@@ -203,12 +208,13 @@ getActivity最后的flag参数要设置成`Intent.FLAG_ACTIVITY_NEW_TASK`，才�
 ![MacDown logo](./5.jpg)
 
  在黑色上面的文字显示不清楚，但是别人家的应用在不同在亮色背景和暗色背景上表现的都很好，所以。。。
- 解决方案：尝试获取通知栏的主题颜色看看，根据该颜色去动态改变设置通知栏中文字的颜色，代码如下：
+<br>解决方案：尝试获取通知栏的主题颜色看看，根据该颜色去动态改变设置通知栏中文字的颜色，代码如下：
  
-  	 
-  	public static boolean isDarkNotificationTheme(Context context) {
+  ```	 
+  public static boolean isDarkNotificationTheme(Context context) {
         return !isSimilarColor(Color.BLACK, getNotificationColor(context));
-    }
+    	}
+  ```
 
     /**
      * 获取通知栏颜色
@@ -268,12 +274,14 @@ getActivity最后的flag参数要设置成`Intent.FLAG_ACTIVITY_NEW_TASK`，才�
 	
 	
 再来验证一下效果：
-![MacDown logo](./6.JPG)
-![MacDown logo](./7.JPG)
+![](./6.JPG)
+![](./7.JPG)
+
 
 ####  坑五，在某些手机上当按home键之后通过通知栏进入应用会比较慢
 一开始我们测试了一些手机发现在大多数手机上不存在这样的问题，打开还是很快的，只有在oppo的手机上会存在这样的问题，本来打算不解决了但是一是QA的较真下一是觉得这里面肯定有android系统机制的问题想了解这个问题，所以就研究了一下发现：
 在谷歌的 Android API Guides 中，特意提醒开发者不要在后台启动 activity，包括在 Service 和 BroadcastReceiver 中，这样的设计是为了避免在用户毫不知情的情况下突然中断用户正在进行的工作，在  [http://developer.android.com/guide/practices/seamlessness.html#interrupt](http://developer.android.com/guide/practices/seamlessness.html#interrupt) 中有如下解释：
+
 
 **That is, don't call startActivity() from BroadcastReceivers or Services running in the background. Doing so will interrupt whatever application is currently running, and result in an annoyed user. Perhaps even worse, your Activity may become a "keystroke bandit" and receive some of the input the user was in the middle of providing to the previous Activity. Depending on what your application does, this could be bad news.**
 
@@ -297,7 +305,7 @@ So instead of this
 
 	Intent intent = new Intent(context, A.class);
     intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-   	context.startActivity(intent);
+    context.startActivity(intent);
 
 just do this
 
@@ -337,7 +345,7 @@ just do this
 看到问题文发生在 `NotificationManager.notifyAsUser`
 <br>之后去看源码喽，进入源码看到
 
-```java 
+  ```
   */
     public void notifyAsUser(String tag, int id, Notification notification, UserHandle user)
     {
@@ -354,10 +362,10 @@ just do this
         }
         fixLegacySmallIcon(notification, pkg);
         ......
-```
+ ```
 这里有一个调用了**`Notification.addFieldsFromContext(mContext, notification);`**
 
-```java
+ 
     /**
      * @hide
      */
@@ -366,28 +374,28 @@ just do this
         notification.extras.putParcelable(EXTRA_BUILDER_APPLICATION_INFO, ai);
         notification.extras.putInt(EXTRA_ORIGINATING_USERID, userId);
     }
-```
+ 
 可以看到在这里是往传入的notification的extras数据中添加相应的数据，Extras是一个**Bundle**，熟悉的开发同学可能都知道Bundle的数据大小是有限制的
 
-```
-“The Binder transaction buffer has a limited fixed size, currently 1Mb, which is shared by all 
+ 
+**“The Binder transaction buffer has a limited fixed size, currently 1Mb, which is shared by all 
 transactions in progress for the process. Consequently this exception can be thrown when 
 there are many transactions in progress even when most of the individual transactions are of 
-moderate size.”
-```
+moderate size.”**
+ 
 所以问题知道了，我们再来看调用；之前更新notification的时候如下
 
-```
-if (notification != null) {
-    NotificationManager notificationManager = (NotificationManager) ContextUtil.get().getSystemService(Context.NOTIFICATION_SERVICE);
- 	notificationManager.notify(FOREGROUND_ID, notification);
-}
-```
+
+	if (notification != null) {
+    		NotificationManager notificationManager = (NotificationManager) ContextUtil.get().getSystemService(Context.NOTIFICATION_SERVICE);
+ 		notificationManager.notify(FOREGROUND_ID, notification);
+	}
+
 一直传入的是同一个notification对象，所以在每次更新通知的时候都是向同一个notification的Bundle添加数据当更新次数过多的时候就会把bundle撑爆了，导致上述问题。
 
 解决方案：更新的notify的时候当达到一定的数量的时候就不要复用该notification对象了， 重新复制创建一个新的对象，代码如下：
 
-```java
+
     private void updateNotify() {
         // FIX bug :  #269468 android.os.TransactionTooLargeException
         // data parcel size 576640 bytes
@@ -406,5 +414,5 @@ if (notification != null) {
             notificationManager.notify(FOREGROUND_ID, notification);
         }
     }
-```
+ 
 此处采用的是50次 当没到50次的时候创建一个新的对象，经过测试发送了500次以上没有再发生该崩溃的情况。
