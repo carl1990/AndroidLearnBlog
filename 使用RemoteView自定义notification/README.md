@@ -192,9 +192,7 @@ Broadcast<br>
 getActivity最后的flag参数要设置成`Intent.FLAG_ACTIVITY_NEW_TASK`，才能成功启动PendingIntent中包含的activity。
 2. 对于broadcast而言，因为PendingIntent是递交给别的应用程序执行，所以接收Broadcast的receiver必须设置**“export=true”**，才能接收到广播。但是有些手机上，经过测试即使“export=false”也还是能接收到广播，可能是OEM厂商对系统有所修改。但是建议最好设置成“export=true”。
 3. 这个最恶心的问题也是坑了好久的，在某些机型(比如我用的`VIVO NEX`)会有严格的权限管理，禁止**后台弹出界面**,所以需要去打开相应的权限之后点击才能打开应用相应的页面。
-
-<br>
-![halou](./4.png)
+![MacDown logo](./4.png)
 
 
 
@@ -412,4 +410,4 @@ moderate size.”**
         }
     }
  
- 此处采用的是50次 当没到50次的时候创建一个新的对象，经过测试发送了500次以上没有再发生该崩溃的情况。
+ 此处采用的是50次 当每到50次的时候创建一个新的对象作为更新对象，经过测试发送了500次以上更新没有再发生该崩溃的情况。
