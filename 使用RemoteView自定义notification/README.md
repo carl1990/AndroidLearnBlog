@@ -199,7 +199,9 @@ getActivity最后的flag参数要设置成`Intent.FLAG_ACTIVITY_NEW_TASK`，才�
 #### 坑四：通知栏文字颜色在部分机型通知栏为暗色的时候看不清楚
 	
 先看一下在不同手机上的表现：
- ![MacDown logo](./5.jpg)
+
+![MacDown logo](./5.jpg)
+
  在黑色上面的文字显示不清楚，但是别人家的应用在不同在亮色背景和暗色背景上表现的都很好，所以。。。
  解决方案：尝试获取通知栏的主题颜色看看，根据该颜色去动态改变设置通知栏中文字的颜色，代码如下：
  
@@ -266,8 +268,8 @@ getActivity最后的flag参数要设置成`Intent.FLAG_ACTIVITY_NEW_TASK`，才�
 	
 	
 再来验证一下效果：
-![MacDown logo](./6.jpg)
-![MacDown logo](./7.jpg)
+![MacDown logo](./6.JPG)
+![MacDown logo](./7.JPG)
 
 ####  坑五，在某些手机上当按home键之后通过通知栏进入应用会比较慢
 一开始我们测试了一些手机发现在大多数手机上不存在这样的问题，打开还是很快的，只有在oppo的手机上会存在这样的问题，本来打算不解决了但是一是QA的较真下一是觉得这里面肯定有android系统机制的问题想了解这个问题，所以就研究了一下发现：
