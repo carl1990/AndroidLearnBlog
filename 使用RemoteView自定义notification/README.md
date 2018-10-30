@@ -194,7 +194,7 @@ getActivity最后的flag参数要设置成`Intent.FLAG_ACTIVITY_NEW_TASK`，才�
 3. 这个最恶心的问题也是坑了好久的，在某些机型(比如我用的`VIVO NEX`)会有严格的权限管理，禁止**后台弹出界面**,所以需要去打开相应的权限之后点击才能打开应用相应的页面。
 
 <br>
-![da](./4.png)
+![halou](./4.png)
 
 
 
