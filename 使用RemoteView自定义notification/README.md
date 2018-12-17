@@ -378,36 +378,88 @@ transactions in progress for the process. Consequently this exception can be thr
 there are many transactions in progress even when most of the individual transactions are of 
 moderate size.”**
  
-所以问题知道了，我们再来看调用；之前更新notification的时候如下
+所以问题知道了，我们再来看调用；之前每次更新我都使用了同一个RemoteView的实例，并且每次都会更新相应的文字，图标等，然后他所有的操作都会走到RemoteViews的`addAction()`方法
 
 
-	if (notification != null) {
-    		NotificationManager notificationManager = (NotificationManager) ContextUtil.get().getSystemService(Context.NOTIFICATION_SERVICE);
- 		notificationManager.notify(FOREGROUND_ID, notification);
-	}
-
-一直传入的是同一个notification对象，所以在每次更新通知的时候都是向同一个notification的Bundle添加数据当更新次数过多的时候就会把bundle撑爆了，导致上述问题。
-
-解决方案：更新的notify的时候当达到一定的数量的时候就不要复用该notification对象了， 重新复制创建一个新的对象，代码如下：
-
-
-    private void updateNotify() {
-        // FIX bug :  #269468 android.os.TransactionTooLargeException
-        // data parcel size 576640 bytes
-        //
-        //com.xiwei.logistics.service.NotificationViewHelper.updateNotify(TbsSdkJava)
-        updateCount++;
-        if (notification == null) {
-            notification = ForegroundService.notification;
+	    private void addAction(Action a) {
+        if (hasLandscapeAndPortraitLayouts()) {
+            throw new RuntimeException("RemoteViews specifying separate landscape and portrait" +
+                    " layouts cannot be modified. Instead, fully configure the landscape and" +
+                    " portrait layouts individually before constructing the combined layout.");
         }
-        if (updateCount % 50 == 0) {
-            notification = ForegroundService.initNotification(ContextUtil.get());
+        if (mActions == null) {
+            mActions = new ArrayList<Action>();
         }
+        mActions.add(a);
 
-        if (notification != null) {
-            NotificationManager notificationManager = (NotificationManager) ContextUtil.get().getSystemService(Context.NOTIFICATION_SERVICE);
-            notificationManager.notify(FOREGROUND_ID, notification);
+        // update the memory usage stats
+        a.updateMemoryUsageEstimate(mMemoryUsageCounter);
+    }
+
+
+可以看到这里使用的是一个ArrayList，一直在填充数据，会导致mActions不断扩容变大，当在进行`NotificationManager.notifyAsUser`操作，由于需要跨进程通信，会将notify 和 remoteViews 进行序列化，从而导致这个问题
+
+解决方案：更新的notify的时候需要每次创建一个新的RemoteViews,并且将新的remoteView 传递给notification 
+
+        private void updateNotify() {
+        try {
+            notification = ForegroundService.initNotification(ContextUtil.get(), mRemoteViews);
+            if (notification != null) {
+                NotificationManager notificationManager = (NotificationManager) ContextUtil.get().getSystemService(Context.NOTIFICATION_SERVICE);
+                notificationManager.notify(FOREGROUND_ID, notification);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            YmmLogger.commonLog().page("long_notification").elementId("create").view().param("error", e.getMessage()).enqueue();
         }
     }
- 
- 此处采用的是50次 当每到50次的时候创建一个新的对象作为更新对象，经过测试发送了500次以上更新没有再发生该崩溃的情况。
+    
+#### 坑七
+
+在bugly上面还看到很多关于remoteView nullPoint /mAction的数组越界的问题。
+
+
+	java.lang.NullPointerException
+
+	Attempt to invoke virtual method 'boolean 	android.widget.RemoteViews$Action.hasSameAppInfo(android.content.pm.ApplicationInfo)' on a null object reference
+
+	解析原始
+	1 android.widget.RemoteViews.writeToParcel(RemoteViews.java:3840)
+	2 android.app.Notification.writeToParcelImpl(Notification.java:2304)
+	3 android.app.Notification.writeToParcel(Notification.java:2248)
+	4 	android.app.INotificationManager$Stub$Proxy.enqueueNotificationWithTag(INotificationManager.java:1404)
+	5 android.app.NotificationManager.notifyAsUser(NotificationManager.java:323)
+	6 android.app.NotificationManager.notify(NotificationManager.java:292)
+	7 android.app.NotificationManager.notify(NotificationManager.java:276)
+
+还有
+
+	java.lang.ArrayIndexOutOfBoundsException
+
+	length=8; index=8
+
+	解析原始
+	1 android.util.ArraySet.freeArrays(ArraySet.java:214)
+	2 android.util.ArraySet.add(ArraySet.java:394)
+	3 android.app.Notification.-	android_app_Notification_lambda$1(Notification.java:1956)
+	4 android.app.Notification$-void_writeToParcel_android_os_Parcel_parcel_int_flags_LambdaImpl0.onMarshaled(Notification.java)
+	5 android.app.PendingIntent.writeToParcel(PendingIntent.java:1051)
+	6 android.widget.RemoteViews$SetOnClickPendingIntent.writeToParcel(RemoteViews.java:773)
+	7 android.widget.RemoteViews.writeToParcel(RemoteViews.java:3509)
+	8 android.app.Notification.writeToParcelImpl(Notification.java:2026)
+	9 android.app.Notification.writeToParcel(Notification.java:1963)
+	10 android.app.INotificationManager$Stub$Proxy.enqueueNotificationWithTag(INotificationManager.java:872)
+	11 android.app.NotificationManager.notifyAsUser(NotificationManager.java:313)
+	12 android.app.NotificationManager.notify(NotificationManager.java:284)
+	13 android.app.NotificationManager.notify(NotificationManager.java:268)
+	14 com.xiwei.logistics.service.NotificationViewHelper.updateNotify(TbsSdkJava)
+	
+
+类似的日志还有很多，大多发生在remoteView做序列化，针对`mAction`的读写和反序列化操作的的上。
+
+最终经过分析(其实看了每一个发生错误的地方的源码，都没看出来为什么，也检查了代码调用的地方也没防发现问题，差点就放弃了，因为这些崩溃量不大，但是还好我没放弃你),其实是**`多线程问题`**导致的，在我刷新这个remoteView的时候有两个数据来源，分别在不同的子线程中更新remoteView,而ArrayList刚好是一个非线程安全的集合类。
+
+**解决方案：**
+
+
+因为我们没办法去修改remoteView的源代码，所以也不能将非线程安全的list换成线程安全的换成线程安全的，我们只好**将所有针对RemoteView的操作都放在同一个线程进行了(主线程或者子线程都可以)**。
