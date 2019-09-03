@@ -74,7 +74,9 @@ launch {
       	}
     }
 ```
-我们可以看到使用kotlin之后我们没有用回调，就像是同步操作一样，写着异步代码。<br>如果这个例子还不够直观我们再来看一个场景：在后台线程执行一个复杂任务，下一个任务依赖于上一个任务的执行结果，所以必须等待上一个任务执行完成后才能开始执行。
+我们可以看到使用kotlin之后我们没有用回调，就像是同步操作一样，写着异步代码。
+
+如果这个例子还不够直观我们再来看一个场景：在后台线程执行一个复杂任务，下一个任务依赖于上一个任务的执行结果，所以必须等待上一个任务执行完成后才能开始执行。
 看下面代码中的三个函数，后两个函数都依赖于前一个函数的执行结果。
 ```kotlin
 fun requestToken(): Token {
@@ -120,7 +122,8 @@ fun postItem(item: Item) {
                 null
             }
 	}
-```	
+```
+
 * RX 方式
 
 ```kotlin	
@@ -133,7 +136,8 @@ fun postItem(item: Item) {
         .subscribe({ post -> processPost(post) }, // onSuccess
                     { e -> e.printStackTrace() } // onError)
 	}
-		
+	
+```
 * kotlin 协程
 	
 ```kotlin
@@ -215,7 +219,8 @@ GlobalScope.launch(Dispatchers.IO) {
 }
 ```
 获取CoroutineScope.async {}的返回值需要通过await()函数，它也是是个挂起函数，调用时会挂起当前协程直到 async 中代码执行完并返回某个值。
- 整个体系大概是这个样子的:<br>
+
+我初步整理了一下协程整个体系大概是这个样子的:(不包含dispatcher 和 excutor部分)
  
  ![MacDown logo](./协程.png)
  
@@ -223,6 +228,7 @@ GlobalScope.launch(Dispatchers.IO) {
 
 ### 原理和高级用法
 1. **挂起与恢复**
+  
   * 挂起函数工作原理 
   
   	协程的内部实现使用了 Kotlin 编译器的一些编译技术，当挂起函数调用时，背后大致细节如下：
@@ -230,20 +236,20 @@ GlobalScope.launch(Dispatchers.IO) {
   		
   	比如：
 		
-	```
+	```kotlin
 	suspend fun requestToken(): Token { ... }
 	```
 		
   	在JVM中是这样的：
 		
-  	```
+  	```kotlin
 	Object requestToken(Continuation<Token> cont) { ... }
 	```
 		
 	**协程内部实现不是使用普通回调的形式，而是使用状态机来处理不同的挂起点**，比如之前的postItem大致的 CPS(Continuation Passing Style) 代码为
 		
 ```java 
-	// 编译后生成的内部类大致如下
+// 编译后生成的内部类大致如下
 final class postItem$1 extends SuspendLambda ... {
    	 public final Object invokeSuspend(Object result) {
         	...
@@ -264,15 +270,15 @@ final class postItem$1 extends SuspendLambda ... {
         		}
     		}
 		}
-```	
+```
+
 上面代码中**每一个挂起点和初始挂起点对应的 Continuation 都会转化为一种状态，协程恢复只是跳转到下一种状态中**。挂起函数将执行过程分为多个 Continuation 片段，并且利用状态机的方式保证各个片段是顺序执行的。
   		
   * 挂起函数可能会挂起协程
   
-  	挂起函数使用 CPS style 的代码来挂起协程，保证挂起点后面的代码只能在挂起函数执行完后才能执行，所以挂起函数保证了协程内的顺序执行顺序。
+挂起函数使用 CPS style 的代码来挂起协程，保证挂起点后面的代码只能在挂起函数执行完后才能执行，所以挂起函数保证了协程内的顺序执行顺序。
   
   ```kotlin
- 
   fun postItem(item: Item) {
     	GlobalScope.launch {
         	// async { requestToken() } 新建一个协程，可能在另一个线程运行
@@ -288,6 +294,7 @@ final class postItem$1 extends SuspendLambda ... {
  ```
   await()挂起函数挂起当前协程，直到异步协程完成执行，但是这里并没有阻塞线程，是使用状态机的控制逻辑来实现。而且挂起函数可以保证挂起点之后的代码一定在挂起点前代码执行完成后才会执行，挂起函数保证顺序执行，所以异步逻辑也可以用顺序的代码顺序来编写。
   <br>注意挂起函数不一定会挂起协程，如果相关调用的结果已经可用，库可以决定继续进行而不挂起，例如async { requestToken() }的返回值Deferred的结果已经可用时，await()挂起函数可以直接返回结果，不用再挂起协程。
+  
   * 挂起函数不会阻塞线程
   
 挂起函数挂起协程，并不会阻塞协程所在的线程，例如协程的delay()挂起函数会暂停协程一定时间，并不会阻塞协程所在线程，但是Thread.sleep()函数会阻塞线程。
@@ -328,7 +335,7 @@ the first coroutine
 
 	协程的所属的线程调度，主要是由协程的`CoroutineDispatcher`控制，`CoroutineDispatcher`可以指定协程运行在某一特定线程上、运作在线程池中或者不指定所运行的线程。所以协程调度器可以分为*Confined dispatcher*和*Unconfined dispatcher*，*Dispatchers.Default*、*Dispatchers.IO*和*Dispatchers.Main*属于Confined dispatcher，都指定了协程所运行的线程或线程池，挂起函数恢复后协程也是运行在指定的线程或线程池上的，而Dispatchers.Unconfined属于Unconfined dispatcher，协程启动并运行在 Caller Thread 上，但是只是在第一个挂起点之前是这样的，挂起恢复后运行在哪个线程完全由所调用的挂起函数决定。
 		
-```java
+```kotlin
 fun main(args: Array<String>) = runBlocking<Unit> {
     	launch { // 默认继承 parent coroutine 的 CoroutineDispatcher，指定运行在 main 线程
         	println("main runBlocking: I'm working in thread ${Thread.currentThread().name}")
@@ -374,7 +381,7 @@ public suspend fun delay(timeMillis: Long) {
 
 delay 使用**suspendCancellableCoroutine**挂起协程，而协程恢复的一般情况下是关键在DefaultExecutor.scheduleResumeAfterDelay()，其中实现是schedule(DelayedResumeTask(timeMillis, continuation))，其中的关键逻辑是将 DelayedResumeTask 放到 DefaultExecutor 的队列最后，在延迟的时间到达就会执行 DelayedResumeTask，那么该 task 里面的实现是什么：
 	
-```java
+```kotlin
 override fun run() {
     	// 直接在调用者线程恢复协程
     	with(cont) { resumeUndispatched(Unit) }
