@@ -237,10 +237,10 @@ launch函数定义如果不指定CoroutineDispatcher或者没有其他的Continu
 		
 	**协程内部实现不是使用普通回调的形式，而是使用状态机来处理不同的挂起点**，比如之前的postItem大致的 CPS(Continuation Passing Style) 代码为
 		
-	```java 
+```java 
 	// 编译后生成的内部类大致如下
-	final class postItem$1 extends SuspendLambda ... {
-   	 		public final Object invokeSuspend(Object result) {
+final class postItem$1 extends SuspendLambda ... {
+   	 public final Object invokeSuspend(Object result) {
         	...
         	switch (this.label) {
             	case 0:
@@ -259,15 +259,15 @@ launch函数定义如果不指定CoroutineDispatcher或者没有其他的Continu
         		}
     		}
 		}
-	```	
-	上面代码中**每一个挂起点和初始挂起点对应的 Continuation 都会转化为一种状态，协程恢复只是跳转到下一种状态中**。挂起函数将执行过程分为多个 Continuation 片段，并且利用状态机的方式保证各个片段是顺序执行的。
+```	
+上面代码中**每一个挂起点和初始挂起点对应的 Continuation 都会转化为一种状态，协程恢复只是跳转到下一种状态中**。挂起函数将执行过程分为多个 Continuation 片段，并且利用状态机的方式保证各个片段是顺序执行的。
   		
   * 挂起函数可能会挂起协程
   
   	挂起函数使用 CPS style 的代码来挂起协程，保证挂起点后面的代码只能在挂起函数执行完后才能执行，所以挂起函数保证了协程内的顺序执行顺序。
   
-  ```java
-  
+  ```kotlin
+ 
   fun postItem(item: Item) {
     	GlobalScope.launch {
         	// async { requestToken() } 新建一个协程，可能在另一个线程运行
@@ -285,10 +285,10 @@ launch函数定义如果不指定CoroutineDispatcher或者没有其他的Continu
   <br>注意挂起函数不一定会挂起协程，如果相关调用的结果已经可用，库可以决定继续进行而不挂起，例如async { requestToken() }的返回值Deferred的结果已经可用时，await()挂起函数可以直接返回结果，不用再挂起协程。
   * 挂起函数不会阻塞线程
   
-  		挂起函数挂起协程，并不会阻塞协程所在的线程，例如协程的delay()挂起函数会暂停协程一定时间，并不会阻塞协程所在线程，但是Thread.sleep()函数会阻塞线程。
+挂起函数挂起协程，并不会阻塞协程所在的线程，例如协程的delay()挂起函数会暂停协程一定时间，并不会阻塞协程所在线程，但是Thread.sleep()函数会阻塞线程。
   		
- ```java
-	fun main(args: Array<String>) {
+ ```kotlin
+fun main(args: Array<String>) {
     		// 创建一个单线程的协程调度器，下面两个协程都运行在这同一线程上
     		val dispatcher = newSingleThreadContext("wm")
     		// 启动协程 1
@@ -307,41 +307,41 @@ launch函数定义如果不指定CoroutineDispatcher或者没有其他的Continu
     		Thread.sleep(500)
 }
 ```
-	结果为：
+结果为：
 ```
-		the first coroutine
+the first coroutine
 	
-		the second coroutine
+the second coroutine
 	
-		the second coroutine
+the second coroutine
 	
-		the first coroutine
+the first coroutine
 ```
-		从上面结果可以看出，当协程 1 暂停 200 ms 时，线程并没有阻塞，而是执行协程 2 的代码，然后在 200 ms 时间到后，继续执行协程 1 的逻辑。所以挂起函数并不会阻塞线程，这样可以节省线程资源，协程挂起时，线程可以继续执行其他逻辑。
+从上面结果可以看出，当协程 1 暂停 200 ms 时，线程并没有阻塞，而是执行协程 2 的代码，然后在 200 ms 时间到后，继续执行协程 1 的逻辑。所以挂起函数并不会阻塞线程，这样可以节省线程资源，协程挂起时，线程可以继续执行其他逻辑。
 
   * 挂起函数恢复
 
 	协程的所属的线程调度，主要是由协程的`CoroutineDispatcher`控制，`CoroutineDispatcher`可以指定协程运行在某一特定线程上、运作在线程池中或者不指定所运行的线程。所以协程调度器可以分为*Confined dispatcher*和*Unconfined dispatcher*，*Dispatchers.Default*、*Dispatchers.IO*和*Dispatchers.Main*属于Confined dispatcher，都指定了协程所运行的线程或线程池，挂起函数恢复后协程也是运行在指定的线程或线程池上的，而Dispatchers.Unconfined属于Unconfined dispatcher，协程启动并运行在 Caller Thread 上，但是只是在第一个挂起点之前是这样的，挂起恢复后运行在哪个线程完全由所调用的挂起函数决定。
 		
 ```java
-		fun main(args: Array<String>) = runBlocking<Unit> {
-    		launch { // 默认继承 parent coroutine 的 CoroutineDispatcher，指定运行在 main 线程
-        		println("main runBlocking: I'm working in thread ${Thread.currentThread().name}")
-        		delay(100)
-        		println("main runBlocking: After delay in thread ${Thread.currentThread().name}")
-    		}
-    		launch(Dispatchers.Unconfined) {
-        		println("Unconfined      : I'm working in thread ${Thread.currentThread().name}")
-        		delay(100)
-        		println("Unconfined      : After delay in thread ${Thread.currentThread().name}")
-    		}
-		}
+fun main(args: Array<String>) = runBlocking<Unit> {
+    	launch { // 默认继承 parent coroutine 的 CoroutineDispatcher，指定运行在 main 线程
+        	println("main runBlocking: I'm working in thread ${Thread.currentThread().name}")
+        	delay(100)
+        	println("main runBlocking: After delay in thread ${Thread.currentThread().name}")
+    	}
+    	launch(Dispatchers.Unconfined) {
+        	println("Unconfined      : I'm working in thread ${Thread.currentThread().name}")
+        	delay(100)
+        	println("Unconfined      : After delay in thread ${Thread.currentThread().name}")
+    	}
+}
 ```
 
 结果如下：
 	
 ```
-	Unconfined      : I'm working in thread main
+Unconfined      : I'm working in thread main
 main runBlocking: I'm working in thread main
 Unconfined      : After delay in thread kotlinx.coroutines.DefaultExecutor
 main runBlocking: After delay in thread main
@@ -349,23 +349,25 @@ main runBlocking: After delay in thread main
 ```
 其中协程是如何创建以及进行调度，限于篇幅不做过多介绍想了解可以自行阅读源码。
 其中关键方法和类：
+	
 	coroutine.start()，createCoroutineUnintercepted()，	intercepted()，resumeCancellableWithException(), withCoroutineContext()
 
-		DispatchedContinuation ,ContinuationInterceptor,CoroutineDispatcher,CoroutineScheduler
+	DispatchedContinuation ,ContinuationInterceptor,CoroutineDispatcher,CoroutineScheduler
 		
 3. **delay和yield**
 	
 	delay的作用是延迟执行协程中代码,其实现为
 	
-```java
-	public suspend fun delay(timeMillis: Long) {
+```kotlin
+public suspend fun delay(timeMillis: Long) {
     	if (timeMillis <= 0) return // don't delay
     	return suspendCancellableCoroutine sc@ { cont: CancellableContinuation<Unit> ->
         cont.context.delay.scheduleResumeAfterDelay(timeMillis, cont)
-    	}
-	}
+    }
+}
 ```
-	delay 使用**suspendCancellableCoroutine**挂起协程，而协程恢复的一般情况下是关键在DefaultExecutor.scheduleResumeAfterDelay()，其中实现是schedule(DelayedResumeTask(timeMillis, continuation))，其中的关键逻辑是将 DelayedResumeTask 放到 DefaultExecutor 的队列最后，在延迟的时间到达就会执行 DelayedResumeTask，那么该 task 里面的实现是什么：
+
+delay 使用**suspendCancellableCoroutine**挂起协程，而协程恢复的一般情况下是关键在DefaultExecutor.scheduleResumeAfterDelay()，其中实现是schedule(DelayedResumeTask(timeMillis, continuation))，其中的关键逻辑是将 DelayedResumeTask 放到 DefaultExecutor 的队列最后，在延迟的时间到达就会执行 DelayedResumeTask，那么该 task 里面的实现是什么：
 	
 ```java
 override fun run() {
@@ -373,10 +375,11 @@ override fun run() {
     	with(cont) { resumeUndispatched(Unit) }
 }
 ```
-	`yield()`的作用是挂起当前协程，然后将协程分发到 Dispatcher 的队列，这样可以让该协程所在线程或线程池可以运行其他协程逻辑，然后在 Dispatcher 空闲的时候继续执行原来协程。简单的来说就是让出自己的执行权，给其他协程使用，当其他协程执行完成或也让出执行权时，一开始的协程可以恢复继续运行。
+
+`yield()`的作用是挂起当前协程，然后将协程分发到 Dispatcher 的队列，这样可以让该协程所在线程或线程池可以运行其他协程逻辑，然后在 Dispatcher 空闲的时候继续执行原来协程。简单的来说就是让出自己的执行权，给其他协程使用，当其他协程执行完成或也让出执行权时，一开始的协程可以恢复继续运行。
 	
-	```java
-	fun main(args: Array<String>) = runBlocking<Unit> {
+```kotlin
+fun main(args: Array<String>) = runBlocking<Unit> {
     	launch {
         	repeat(3) {
             	println("job1 repeat $it times")
@@ -389,7 +392,7 @@ override fun run() {
            	yield()
         	}
     	}
-	}
+}
 ```
 结果如下：
 	
@@ -402,9 +405,9 @@ job1 repeat 2 times
 job2 repeat 2 times
 ```
 
-	其实现为：
+其实现为：
 	
-	```java
+```kotlin
 	public suspend fun yield(): Unit = suspendCoroutineUninterceptedOrReturn sc@ { uCont ->
     	val context = uCont.context
     	context.checkCompletion()
@@ -418,10 +421,10 @@ job2 repeat 2 times
 ```
 我们可以发现共同点就是:**挂起函数的关键是调用suspendCoroutineUninterceptedOrReturn函数包装，然后在异步逻辑完成时调用resume手动恢复协程**。
 
-	我们可以手动尝试将异步网络回调封装为挂起函数
+我们可以手动尝试将异步网络回调封装为挂起函数
 
-	```java
-	suspend fun <T> Call<T>.await(): T = suspendCoroutine { cont ->
+```kotlin
+suspend fun <T> Call<T>.await(): T = suspendCoroutine { cont ->
     	enqueue(object : Callback<T> {
         	override fun onResponse(call: Call<T>, response: Response<T>) { 
             	if (response.isSuccessful) {
@@ -436,30 +439,31 @@ job2 repeat 2 times
     	})
 	}
 ```
+
 上面的await()的扩展函数调用时，首先会挂起当前协程，然后执行enqueue将网络请求放入队列中，当请求成功时，通过cont.resume(response.body()!!)来恢复之前的协程。
 
 
 4. 协程关系
 
-	在job的源码中有这样一段注释
-	![MacDown logo](./8.png)
+在job的源码中有这样一段注释
+![MacDown logo](./8.png)
 	
-	所以协程之间存在父子关系，他们之间的关系如下：
-	* 父协程手动调用cancel()或者异常结束，会立即取消它的所有子协程。
-	* 父协程必须等待所有子协程完成（处于完成或者取消状态）才能完成。
-	* 子协程抛出未捕获的异常时，默认情况下会取消其父协程。
+所以协程之间存在父子关系，他们之间的关系如下：
+* 父协程手动调用cancel()或者异常结束，会立即取消它的所有子协程。
+* 父协程必须等待所有子协程完成（处于完成或者取消状态）才能完成。
+* 子协程抛出未捕获的异常时，默认情况下会取消其父协程。
 
-	在`AbstractCoroutine`的 Start()方法中我们会看到一开始就初始化了父任务
+在`AbstractCoroutine`的 Start()方法中我们会看到一开始就初始化了父任务
 	
-	```java
-	public fun start(start: CoroutineStart, block: suspend () -> T) {
+```kotlin
+public fun start(start: CoroutineStart, block: suspend () -> T) {
         initParentJob()
         start(block, this)
-    }
-	```
+   }
+```
 	
-	```java
-	internal fun initParentJobInternal(parent: Job?) {
+```kotlin
+internal fun initParentJobInternal(parent: Job?) {
         check(parentHandle == null)
         if (parent == null) {
             parentHandle = NonDisposableHandle
@@ -475,10 +479,10 @@ job2 repeat 2 times
             parentHandle = NonDisposableHandle // release it just in case, to aid GC
         }
     }
-	```
-	可以看到最关键的流程是`parent.attachChild`
+```
+可以看到最关键的流程是`parent.attachChild`
 	
-	```java
+```kotlin
 	@Suppress("OverridingDeprecatedMember")
     public final override fun attachChild(child: ChildJob): ChildHandle {
         /*
@@ -493,11 +497,11 @@ job2 repeat 2 times
         return invokeOnCompletion(onCancelling = true, handler = ChildHandleNode(this, child).asHandler) as ChildHandle
     }
 
-	```
-	invokeOnCompletion()方法如下：
+```
+invokeOnCompletion()方法如下：
 	
-	```java
-	    public final override fun invokeOnCompletion(
+```java
+public final override fun invokeOnCompletion(
         onCancelling: Boolean,
         invokeImmediately: Boolean,
         handler: CompletionHandler
@@ -557,18 +561,18 @@ job2 repeat 2 times
         }
     }
 
-	```
-	他会根据root的状态来进行不同的处理，具体注释已经很清楚了就不多说了。
+```
+他会根据root的状态来进行不同的处理，具体注释已经很清楚了就不多说了。
 	
-	这样我们就清除协程父子关系，以及他们之间的互相影响。
+这样我们就清除协程父子关系，以及他们之间的互相影响。
 
 5. **异常处理**
 	
-	协程中排除异常时一般都在逻辑运算中，而在协程中的三层包装中，逻辑运算发生在第二层的`BaseContinuationImpl`中`resumeWith()`函数中的`invokeSuspend`运行。
+协程中排除异常时一般都在逻辑运算中，而在协程中的三层包装中，逻辑运算发生在第二层的`BaseContinuationImpl`中`resumeWith()`函数中的`invokeSuspend`运行。
 	
-	```java
-	    // This implementation is final. This fact is used to unroll resumeWith recursion.
-    public final override fun resumeWith(result: Result<Any?>) {
+```kotlin
+// This implementation is final. This fact is used to unroll resumeWith recursion.
+public final override fun resumeWith(result: Result<Any?>) {
         // This loop unrolls recursion in current.resumeWith(param) to make saner and shorter stack traces on resume
         var current = this
         var param = result
@@ -599,14 +603,14 @@ job2 repeat 2 times
             }
         }
     }
-	```
-	从try {} catch {}语句来看，首先协程运算过程中所有未捕获异常其实都会在第二层包装中被捕获，然后会通过AbstractCoroutine.resumeWith(Result.failure(exception))进入到第三层包装中，所以协程的第三层包装不仅维护协程的状态，还处理协程运算中的未捕获异常。
+```
+从try {} catch {}语句来看，首先协程运算过程中所有未捕获异常其实都会在第二层包装中被捕获，然后会通过AbstractCoroutine.resumeWith(Result.failure(exception))进入到第三层包装中，所以协程的第三层包装不仅维护协程的状态，还处理协程运算中的未捕获异常。
 	
-	在上面我们讲到 当子协程发生未捕获的异常时，父协程也会被取消，我们看看系统是如何处理的。
-	在`AbstractCoroutine`中的`resumeWith`方法中最终会调用到`tryMakeCompleting`方法
+在上面我们讲到 当子协程发生未捕获的异常时，父协程也会被取消，我们看看系统是如何处理的。
+在`AbstractCoroutine`中的`resumeWith`方法中最终会调用到`tryMakeCompleting`方法
 	
-	```java
-	private fun tryMakeCompleting(state: Any?, proposedUpdate: Any?, mode: Int): Int {
+```kotlin
+private fun tryMakeCompleting(state: Any?, proposedUpdate: Any?, mode: Int): Int {
         if (state !is Incomplete)
             return COMPLETING_ALREADY_COMPLETING
         /*
@@ -658,10 +662,10 @@ job2 repeat 2 times
         // otherwise retry
         return COMPLETING_RETRY
     }
-	```
-	 当发生异常的时候会调用`notifyCancelling`方法
+```
+当发生异常的时候会调用`notifyCancelling`方法
 	 
-	 ```java
+```kotlin
 	private fun notifyCancelling(list: NodeList, cause: Throwable) {
         // first cancel our own children
         onCancelling(cause)
@@ -669,11 +673,11 @@ job2 repeat 2 times
         // then cancel parent
         cancelParent(cause) // tentative cancellation -- does not matter if there is no parent
     }
-	 ```
+```
 	 
-	 会通知`cancelParent`
+会通知`cancelParent`
 	 
-	 ```java
+```kotlin
 	private fun cancelParent(cause: Throwable): Boolean {
         // CancellationException is considered "normal" and parent is not cancelled when child produces it.
         // This allow parent to cancel its children (normally) without being cancelled itself, unless
@@ -682,35 +686,35 @@ job2 repeat 2 times
         if (!cancelsParent) return false
         return parentHandle?.childCancelled(cause) == true
     }
-	 ```
+```
 	
-	所以出现未捕获异常时，首先会取消所有子协程，然后可能会取消父协程。而有些情况下并不会取消父协程，一是当异常属于 CancellationException 时，二是使用`SupervisorJob`和`supervisorScope`时，子协程出现未捕获异常时也不会影响父协程，它们的原理是重写 `childCancelled()` 为
+所以出现未捕获异常时，首先会取消所有子协程，然后可能会取消父协程。而有些情况下并不会取消父协程，一是当异常属于 CancellationException 时，二是使用`SupervisorJob`和`supervisorScope`时，子协程出现未捕获异常时也不会影响父协程，它们的原理是重写 `childCancelled()` 为
 	
-	`	override fun childCancelled(cause: Throwable): Boolean = false。
-	`
+```	override fun childCancelled(cause: Throwable): Boolean = false。
+```
 
-	在`tryMakeCompleting`中还有一个关键方法是`tryFinalizeFinishingState`
+在`tryMakeCompleting`中还有一个关键方法是`tryFinalizeFinishingState`
 	
-	其中关键步骤为：
+其中关键步骤为：
 	
-	```java
-	if (finalException != null) {
-            val handled = cancelParent(finalException) || handleJobException(finalException)
-            if (handled) (finalState as CompletedExceptionally).makeHandled()
-        }
+```java
+if (finalException != null) {
+        val handled = cancelParent(finalException) || handleJobException(finalException)
+        if (handled) (finalState as CompletedExceptionally).makeHandled()
+}
 ```
 上面代码中if (finalException != null && !cancelParent(finalException))语句可以看出，除非是 SupervisorJob 和 supervisorScope，一般协程出现未捕获异常时，不仅会取消父协程，一步步取消到最根部的协程，而且最后还由最根部的协程（Root Coroutine）处理协程。
 
-	`handleJobException` 方法在 `StandaloneCoroutine`中实现为：
+`handleJobException` 方法在 `StandaloneCoroutine`中实现为：
 
-	```java
+```kotlin
 override fun handleJobException(exception: Throwable): Boolean {
         handleCoroutineException(context, exception)
         return true
     }
 ```
 
-	```java
+```kotlin
 public fun handleCoroutineException(context: CoroutineContext, exception: Throwable) {
     // Invoke exception handler from the context if present
     try {
@@ -727,85 +731,86 @@ public fun handleCoroutineException(context: CoroutineContext, exception: Throwa
 }
 ```
 
-	可以看出先有自己的ExceptionHandler处理，如果不存在或者处理过程中发生了异常则交由`handleCoroutineExceptionImpl`处理，这是一个internal 方法 由c实现。这里就不继续跟下去了。
+可以看出先有自己的ExceptionHandler处理，如果不存在或者处理过程中发生了异常则交由`handleCoroutineExceptionImpl`处理，这是一个internal 方法 由c实现。这里就不继续跟下去了。
 
-	以上我们就看到协程整个异常的处理过程，以及当发生异常后是如何取消父协程的。
+以上我们就看到协程整个异常的处理过程，以及当发生异常后是如何取消父协程的。
 5. **并发**
 
-	协程在运行时只是线程中的一块代码，线程的并发处理方式都可以用在协程上。不过协程还提供两种特有的方式，一是不阻塞线程的互斥锁Mutex，一是通过 ThreadLocal 实现的协程局部数据。
+协程在运行时只是线程中的一块代码，线程的并发处理方式都可以用在协程上。不过协程还提供两种特有的方式，一是不阻塞线程的互斥锁Mutex，一是通过 ThreadLocal 实现的协程局部数据。
 	
-	* Mutex<br>
-	在线程中锁都是阻塞式的，没获得锁时就没法执行相应的逻辑，而协程可以通过挂起函数解决这个问题，没有锁就挂起协程，获取后再恢复协程，挂起协程时并没有阻塞线程，可以执行其他逻辑。这就是互斥锁`Mutex`,它与synchronized关键字有些类似，还提供了`withLock`扩展函数，替代常用的mutex.lock; try {...} finally { mutex.unlock() }:
+* Mutex<br>
+在线程中锁都是阻塞式的，没获得锁时就没法执行相应的逻辑，而协程可以通过挂起函数解决这个问题，没有锁就挂起协程，获取后再恢复协程，挂起协程时并没有阻塞线程，可以执行其他逻辑。这就是互斥锁`Mutex`,它与synchronized关键字有些类似，还提供了`withLock`扩展函数，替代常用的mutex.lock; try {...} finally { mutex.unlock() }:
 	
-		```java
-		fun main(args: Array<String>) = runBlocking<Unit> {
-    		val mutex = Mutex()
-    		var counter = 0
-    		repeat(10000) {
-        		GlobalScope.launch {
-            		mutex.withLock {
+```kotlin
+fun main(args: Array<String>) = runBlocking<Unit> {
+    	val mutex = Mutex()
+    	var counter = 0
+    	repeat(10000) {
+       		GlobalScope.launch {
+         		mutex.withLock {
                 		counter ++
             		}
-        		}
-    		}
-    		println("The final count is $counter")
-	}
-	```
-	多个协程竞争的应该是同一个Mutex互斥锁。
+        	}
+    	}
+    	println("The final count is $counter")
+}
+```
+多个协程竞争的应该是同一个Mutex互斥锁。
 	
-	* 局部数据
+* 局部数据
 	
-		在线程中我们使用ThreadLocal作为线程局部数据，每个线程中的数据都是独立的。kotlin中协程可以通过`ThreadLocal.asContextElement()`扩展函数实现协程局部数据，每次协程切换会恢复之前的值。
+	在线程中我们使用ThreadLocal作为线程局部数据，每个线程中的数据都是独立的。kotlin中协程可以通过`ThreadLocal.asContextElement()`扩展函数实现协程局部数据，每次协程切换会恢复之前的值。
 		
-		```java
-	fun main(args: Array<String>) = runBlocking<Unit> {
-    		val threadLocal = ThreadLocal<String>().apply { set("Init") }
-    		printlnValue(threadLocal)
-    		val job = 	GlobalScope.launch(threadLocal.asContextElement("launch")) {
-        		printlnValue(threadLocal)
-        		threadLocal.set("launch changed")
-        		printlnValue(threadLocal)
-        		yield()
-        		printlnValue(threadLocal)
-    		}
-    		job.join()
-    		printlnValue(threadLocal)
-	}
-	```
+```kotlin
+fun main(args: Array<String>) = runBlocking<Unit> {
+    	val threadLocal = ThreadLocal<String>().apply { set("Init") }
+    	printlnValue(threadLocal)
+    	val job = GlobalScope.launch(threadLocal.asContextElement("launch")) {
+        	printlnValue(threadLocal)
+        	threadLocal.set("launch changed")
+        	printlnValue(threadLocal)
+       		yield()
+       		printlnValue(threadLocal)
+   	}
+    	job.join()
+    	printlnValue(threadLocal)
+}
+```
 	
-		```java
-		private fun printlnValue(threadLocal: ThreadLocal<String>) {
-    		println("${Thread.currentThread()} thread local value: ${threadLocal.get()}")
-	}
-	```
+```kotlin
+private fun printlnValue(threadLocal: ThreadLocal<String>) {
+  	println("${Thread.currentThread()} thread local value: ${threadLocal.get()}")
+}
+```
 其结果如下：
 
-		```
-	Thread[main,5,main] thread local value: Init
+```java
+Thread[main,5,main] thread local value: Init
 Thread[DefaultDispatcher-worker-1,5,main] thread local value: launch
 Thread[DefaultDispatcher-worker-1,5,main] thread local value: launch changed
 Thread[DefaultDispatcher-worker-2,5,main] thread local value: launch
 Thread[main,5,main] thread local value: Init
-	```
-	为什么在yied()之后值会变调呢？
+```
+为什么在yied()之后值会变调呢？
 
-		在`ThreadContextElement`文件中的`asContextElement`方法如下：
+在`ThreadContextElement`文件中的`asContextElement`方法如下：
 		
-		```
-		public fun <T> ThreadLocal<T>.asContextElement(value: T = get()): ThreadContextElement<T> =
+```kotlin
+public fun <T> ThreadLocal<T>.asContextElement(value: T = get()): ThreadContextElement<T> =
     ThreadLocalElement(value, this)
-		```
-		![MacDown logo](./9.png)
+```
+![MacDown logo](./9.png)
 		
-		其中`updateThreadContext`和`restoreThreadContext`分别用来更新和重置value.
-		那这两个方法又是何时被触发的呢？我们知道在yeid()之后会切换到另一个协程中，最终会调用到该协程的`resumeWith()`方法
-		![MacDown logo](./10.png)
+其中`updateThreadContext`和`restoreThreadContext`分别用来更新和重置value.
+
+那这两个方法又是何时被触发的呢？我们知道在yeid()之后会切换到另一个协程中，最终会调用到该协程的`resumeWith()`方法
+![MacDown logo](./10.png)
 		
-		不管最终是Dispatched.run()、DisptchedContinuation.resumeWith() 、DisptchedContinuation.resumeUndispatched()，最终都会执行`withCoroutineContext（）`方法。
-	![MacDown logo](./11.png)
-	可以看见最终在这里都会重置TreadLocal的值。
+不管最终是Dispatched.run()、DisptchedContinuation.resumeWith() 、DisptchedContinuation.resumeUndispatched()，最终都会执行`withCoroutineContext（）`方法。
+![MacDown logo](./11.png)
+可以看见最终在这里都会重置TreadLocal的值。
 	
-		所以 ThreadContextElement 并不能跟踪所有ThreadLocal对象的访问，而且每次挂起时更新的值将丢失。最重要的牢记它的原理：**启动和恢复时保存ThreadLocal在当前线程的值，并修改为 value，挂起和结束时修改当前线程ThreadLocal的值为之前保存的值**。
+所以 ThreadContextElement 并不能跟踪所有ThreadLocal对象的访问，而且每次挂起时更新的值将丢失。最重要的牢记它的原理：**启动和恢复时保存ThreadLocal在当前线程的值，并修改为 value，挂起和结束时修改当前线程ThreadLocal的值为之前保存的值**。
 	
 整篇文章我们就基本介绍什么是协程，协程的基本使用，以及部分原理。希望能对对家有所帮助，同时欢迎指正，后面会写一个对应实践的demo.
 
