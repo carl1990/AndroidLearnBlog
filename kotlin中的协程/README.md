@@ -35,20 +35,19 @@ kotlin也在1.3中正式转正了协程，之前一直作为实验性功能在�
 既然协程是为了异步而生的那么我们就以此为例来看看协程的亮点在哪里，在异步编程中最为常见的场景是：在后台线程执行一个复杂任务，然后通知UI线程更新。
 通常的写法是这样的
 
-```java
 	request.execute(callback)
 	callback = {
     	onSuccess =  { res ->
         	runOnUIThread() {
-        		//TODO
-        }
+        	//TODO
+            	}
     	}
-
+	
     	onFail =  { error -> 
-        // TODO
+        	// TODO
     	}
 	}
-```
+
 或者我们使用RXJava的方式进行如下：
 	
 	request.subscribe(subscriber)
@@ -56,9 +55,9 @@ kotlin也在1.3中正式转正了协程，之前一直作为实验性功能在�
 	subscriber = ...
 	
 	request.subScribeOn(Androd.Mian).subscribe({
-    	// TODO Success
+    		// TODO Success
 	}, {
-    // TODO Error
+    		// TODO Error
 	})
 	
 但是在kotlin我们可以这样写
@@ -67,8 +66,8 @@ kotlin也在1.3中正式转正了协程，之前一直作为实验性功能在�
 	fun showData(data: Data) { ... }
 	launch {
 		val result = withContext(Dispatchers.IO) {
-            getData()
-       }
+            		getData()
+       		}
        if (result.isSuccessful) {
            showData(result)
       	}
@@ -97,8 +96,8 @@ kotlin也在1.3中正式转正了协程，之前一直作为实验性功能在�
 		fun processPost(post: Post) { ... }
 		fun postItem(item: Item) {
     		requestTokenAsync { token ->
-        		createPostAsync(token, item) { post ->
-            		processPost(post)
+        			createPostAsync(token, item) { post ->
+            				processPost(post)
         		}
     		}
 		}
@@ -128,8 +127,7 @@ kotlin也在1.3中正式转正了协程，之前一直作为实验性功能在�
             	.map { token -> createPost(token, item) }
             	.subscribe(
                     { post -> processPost(post) }, // onSuccess
-                    { e -> e.printStackTrace() } // onError
-            	)
+                    { e -> e.printStackTrace() } // onError)
 		}
 		
 * kotlin 协程
@@ -140,9 +138,9 @@ kotlin也在1.3中正式转正了协程，之前一直作为实验性功能在�
 		fun processPost(post: Post) { ... }
 		fun postItem(item: Item) {
   			GlobalScope.launch {
-        		val token = requestToken()
-        		val post = createPost(token, item)
-        		processPost(post)
+        			val token = requestToken()
+        			val post = createPost(token, item)
+        			processPost(post)
         		// 需要异常处理，直接加上 try/catch 语句即可
     			}
 		}
@@ -211,10 +209,10 @@ launch函数定义如果不指定CoroutineDispatcher或者没有其他的Continu
             	}.await()
             	show(result)
         	}
- 获取CoroutineScope.async {}的返回值需要通过await()函数，它也是是个挂起函数，调用时会挂起当前协程直到 async 中代码执行完并返回某个值。
+ 	获取CoroutineScope.async {}的返回值需要通过await()函数，它也是是个挂起函数，调用时会挂起当前协程直到 async 中代码执行完并返回某个值。
+ 整个体系大概是这个样子的:<br>
  
-		整个体系大概是这个样子的:<br>
- 	![MacDown logo](./协程.png)
+ ![MacDown logo](./协程.png)
  
  
 
@@ -222,16 +220,25 @@ launch函数定义如果不指定CoroutineDispatcher或者没有其他的Continu
 1. **挂起与恢复**
   * 挂起函数工作原理 
   
-  		协程的内部实现使用了 Kotlin 编译器的一些编译技术，当挂起函数调用时，背后大致细节如下：
-  		挂起函数或挂起 lambda 表达式调用时，都有一个隐式的参数额外传入，这个参数是Continuation类型，封装了协程恢复后的执行的代码逻辑。
+  	协程的内部实现使用了 Kotlin 编译器的一些编译技术，当挂起函数调用时，背后大致细节如下：
+  	挂起函数或挂起 lambda 表达式调用时，都有一个隐式的参数额外传入，这个参数是Continuation类型，封装了协程恢复后的执行的代码逻辑。
   		
-  		比如：<br>
-  		```suspend fun requestToken(): Token { ... }```<br>
-  		在JVM中是这样的：<br>
-  		```Object requestToken(Continuation<Token> cont) { ... }```<br>
-		**协程内部实现不是使用普通回调的形式，而是使用状态机来处理不同的挂起点**，比如之前的postItem大致的 CPS(Continuation Passing Style) 代码为
+  	比如：
 		
-		```	java // 编译后生成的内部类大致如下
+	```
+	suspend fun requestToken(): Token { ... }
+	```
+		
+  	在JVM中是这样的：
+		
+  	```
+	Object requestToken(Continuation<Token> cont) { ... }
+	```
+		
+	**协程内部实现不是使用普通回调的形式，而是使用状态机来处理不同的挂起点**，比如之前的postItem大致的 CPS(Continuation Passing Style) 代码为
+		
+	```java 
+	// 编译后生成的内部类大致如下
 	final class postItem$1 extends SuspendLambda ... {
    	 		public final Object invokeSuspend(Object result) {
         	...
@@ -257,9 +264,10 @@ launch函数定义如果不指定CoroutineDispatcher或者没有其他的Continu
   		
   * 挂起函数可能会挂起协程
   
-  		挂起函数使用 CPS style 的代码来挂起协程，保证挂起点后面的代码只能在挂起函数执行完后才能执行，所以挂起函数保证了协程内的顺序执行顺序。
+  	挂起函数使用 CPS style 的代码来挂起协程，保证挂起点后面的代码只能在挂起函数执行完后才能执行，所以挂起函数保证了协程内的顺序执行顺序。
   
-  		```java
+  ```java
+  
   fun postItem(item: Item) {
     	GlobalScope.launch {
         	// async { requestToken() } 新建一个协程，可能在另一个线程运行
@@ -271,14 +279,15 @@ launch函数定义如果不指定CoroutineDispatcher或者没有其他的Continu
         	processPost(post)
     	}
 }
-  ```
+
+ ```
   await()挂起函数挂起当前协程，直到异步协程完成执行，但是这里并没有阻塞线程，是使用状态机的控制逻辑来实现。而且挂起函数可以保证挂起点之后的代码一定在挂起点前代码执行完成后才会执行，挂起函数保证顺序执行，所以异步逻辑也可以用顺序的代码顺序来编写。
   <br>注意挂起函数不一定会挂起协程，如果相关调用的结果已经可用，库可以决定继续进行而不挂起，例如async { requestToken() }的返回值Deferred的结果已经可用时，await()挂起函数可以直接返回结果，不用再挂起协程。
   * 挂起函数不会阻塞线程
   
   		挂起函数挂起协程，并不会阻塞协程所在的线程，例如协程的delay()挂起函数会暂停协程一定时间，并不会阻塞协程所在线程，但是Thread.sleep()函数会阻塞线程。
   		
-  		```java
+ ```java
 	fun main(args: Array<String>) {
     		// 创建一个单线程的协程调度器，下面两个协程都运行在这同一线程上
     		val dispatcher = newSingleThreadContext("wm")
@@ -299,8 +308,7 @@ launch函数定义如果不指定CoroutineDispatcher或者没有其他的Continu
 }
 ```
 	结果为：
-	
-		```
+```
 		the first coroutine
 	
 		the second coroutine
@@ -308,14 +316,14 @@ launch函数定义如果不指定CoroutineDispatcher或者没有其他的Continu
 		the second coroutine
 	
 		the first coroutine
-		```
+```
 		从上面结果可以看出，当协程 1 暂停 200 ms 时，线程并没有阻塞，而是执行协程 2 的代码，然后在 200 ms 时间到后，继续执行协程 1 的逻辑。所以挂起函数并不会阻塞线程，这样可以节省线程资源，协程挂起时，线程可以继续执行其他逻辑。
 
   * 挂起函数恢复
 
-		协程的所属的线程调度，主要是由协程的`CoroutineDispatcher`控制，`CoroutineDispatcher`可以指定协程运行在某一特定线程上、运作在线程池中或者不指定所运行的线程。所以协程调度器可以分为*Confined dispatcher*和*Unconfined dispatcher*，*Dispatchers.Default*、*Dispatchers.IO*和*Dispatchers.Main*属于Confined dispatcher，都指定了协程所运行的线程或线程池，挂起函数恢复后协程也是运行在指定的线程或线程池上的，而Dispatchers.Unconfined属于Unconfined dispatcher，协程启动并运行在 Caller Thread 上，但是只是在第一个挂起点之前是这样的，挂起恢复后运行在哪个线程完全由所调用的挂起函数决定。
+	协程的所属的线程调度，主要是由协程的`CoroutineDispatcher`控制，`CoroutineDispatcher`可以指定协程运行在某一特定线程上、运作在线程池中或者不指定所运行的线程。所以协程调度器可以分为*Confined dispatcher*和*Unconfined dispatcher*，*Dispatchers.Default*、*Dispatchers.IO*和*Dispatchers.Main*属于Confined dispatcher，都指定了协程所运行的线程或线程池，挂起函数恢复后协程也是运行在指定的线程或线程池上的，而Dispatchers.Unconfined属于Unconfined dispatcher，协程启动并运行在 Caller Thread 上，但是只是在第一个挂起点之前是这样的，挂起恢复后运行在哪个线程完全由所调用的挂起函数决定。
 		
-		```java
+```java
 		fun main(args: Array<String>) = runBlocking<Unit> {
     		launch { // 默认继承 parent coroutine 的 CoroutineDispatcher，指定运行在 main 线程
         		println("main runBlocking: I'm working in thread ${Thread.currentThread().name}")
@@ -330,14 +338,15 @@ launch函数定义如果不指定CoroutineDispatcher或者没有其他的Continu
 		}
 ```
 
-		结果如下：
+结果如下：
 	
-		```
+```
 	Unconfined      : I'm working in thread main
 main runBlocking: I'm working in thread main
 Unconfined      : After delay in thread kotlinx.coroutines.DefaultExecutor
 main runBlocking: After delay in thread main
-		```
+
+```
 其中协程是如何创建以及进行调度，限于篇幅不做过多介绍想了解可以自行阅读源码。
 其中关键方法和类：
 	coroutine.start()，createCoroutineUnintercepted()，	intercepted()，resumeCancellableWithException(), withCoroutineContext()
@@ -348,21 +357,21 @@ main runBlocking: After delay in thread main
 	
 	delay的作用是延迟执行协程中代码,其实现为
 	
-	```java
+```java
 	public suspend fun delay(timeMillis: Long) {
     	if (timeMillis <= 0) return // don't delay
     	return suspendCancellableCoroutine sc@ { cont: CancellableContinuation<Unit> ->
         cont.context.delay.scheduleResumeAfterDelay(timeMillis, cont)
     	}
 	}
-	```
+```
 	delay 使用**suspendCancellableCoroutine**挂起协程，而协程恢复的一般情况下是关键在DefaultExecutor.scheduleResumeAfterDelay()，其中实现是schedule(DelayedResumeTask(timeMillis, continuation))，其中的关键逻辑是将 DelayedResumeTask 放到 DefaultExecutor 的队列最后，在延迟的时间到达就会执行 DelayedResumeTask，那么该 task 里面的实现是什么：
 	
-	```java
-	override fun run() {
-    // 直接在调用者线程恢复协程
+```java
+override fun run() {
+    	// 直接在调用者线程恢复协程
     	with(cont) { resumeUndispatched(Unit) }
-	}
+}
 ```
 	`yield()`的作用是挂起当前协程，然后将协程分发到 Dispatcher 的队列，这样可以让该协程所在线程或线程池可以运行其他协程逻辑，然后在 Dispatcher 空闲的时候继续执行原来协程。简单的来说就是让出自己的执行权，给其他协程使用，当其他协程执行完成或也让出执行权时，一开始的协程可以恢复继续运行。
 	
@@ -384,8 +393,8 @@ main runBlocking: After delay in thread main
 ```
 结果如下：
 	
-	```
-	job1 repeat 0 times
+```
+job1 repeat 0 times
 job2 repeat 0 times
 job1 repeat 1 times
 job2 repeat 1 times
