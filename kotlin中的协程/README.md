@@ -35,116 +35,120 @@ kotlin也在1.3中正式转正了协程，之前一直作为实验性功能在�
 既然协程是为了异步而生的那么我们就以此为例来看看协程的亮点在哪里，在异步编程中最为常见的场景是：在后台线程执行一个复杂任务，然后通知UI线程更新。
 通常的写法是这样的
 
-	request.execute(callback)
-	callback = {
+```kotlin
+request.execute(callback)
+callback = {
     	onSuccess =  { res ->
         	runOnUIThread() {
-        	//TODO
+        		//TODO
             	}
-    	}
-	
+    	},
     	onFail =  { error -> 
         	// TODO
     	}
-	}
-
+}
+```
 或者我们使用RXJava的方式进行如下：
-	
-	request.subscribe(subscriber)
+```kotlin	
+request.subscribe(subscriber)
 	...
-	subscriber = ...
+subscriber = ...
 	
-	request.subScribeOn(Androd.Mian).subscribe({
-    		// TODO Success
+request.subScribeOn(Androd.Mian).subscribe({
+    	// TODO Success
 	}, {
-    		// TODO Error
-	})
-	
+    	// TODO Error
+})
+```
 但是在kotlin我们可以这样写
 
-	fun getData(): Data { ... }
-	fun showData(data: Data) { ... }
-	launch {
-		val result = withContext(Dispatchers.IO) {
-            		getData()
-       		}
+```kotlin
+fun getData(): Data { ... }
+fun showData(data: Data) { ... }
+launch {
+	val result = withContext(Dispatchers.IO) {
+		getData()
+       	}
        if (result.isSuccessful) {
            showData(result)
       	}
     }
+```
 我们可以看到使用kotlin之后我们没有用回调，就像是同步操作一样，写着异步代码。<br>如果这个例子还不够直观我们再来看一个场景：在后台线程执行一个复杂任务，下一个任务依赖于上一个任务的执行结果，所以必须等待上一个任务执行完成后才能开始执行。
 看下面代码中的三个函数，后两个函数都依赖于前一个函数的执行结果。
-
-	fun requestToken(): Token {
-    	// makes request for a token & waits
-    	return token // returns result when received 
-	}
-	fun createPost(token: Token, item: Item): Post {
-    	// sends item to the server & waits
-    	return post // returns resulting post 
-	}
-	fun processPost(post: Post) {
-    	// does some local processing of result
-	}
+```kotlin
+fun requestToken(): Token {
+    // makes request for a token & waits
+    return token // returns result when received 
+}
+fun createPost(token: Token, item: Item): Post {
+    // sends item to the server & waits
+    return post // returns resulting post 
+}
+fun processPost(post: Post) {
+    // does some local processing of result
+}
+```
 三个函数中的操作都是耗时操作，因此不能直接在 UI 线程中运行，而且后两个函数都依赖于前一个函数的执行结果，三个任务不能并行运行，该如何解决这个问题呢？
 
 * 回调
 
-	
-		fun requestTokenAsync(cb: (Token) -> Unit) { ... }
-		fun createPostAsync(token: Token, item: Item, cb: (Post) -> Unit) { ... }
-		fun processPost(post: Post) { ... }
-		fun postItem(item: Item) {
-    		requestTokenAsync { token ->
-        			createPostAsync(token, item) { post ->
-            				processPost(post)
-        		}
-    		}
-		}
-
+```kotlin
+fun requestTokenAsync(cb: (Token) -> Unit) { ... }
+fun createPostAsync(token: Token, item: Item, cb: (Post) -> Unit) { ... }
+fun processPost(post: Post) { ... }
+fun postItem(item: Item) {
+	requestTokenAsync { token ->
+		createPostAsync(token, item) { post ->
+			processPost(post)
+        	}
+    	}
+}
+```
 * Future或者promise
-	
-		fun requestTokenAsync(): CompletableFuture<Token> { ... }
-		fun createPostAsync(token: Token, item: Item): CompletableFuture<Post> { ... }
-		fun processPost(post: Post) { ... }
-		fun postItem(item: Item) {
-    		requestTokenAsync()
-            .thenCompose { token -> createPostAsync(token, item) }
-            .thenAccept { post -> processPost(post) }
-            .exceptionally { e ->
-                e.printStackTrace()
+
+```kotlin
+fun requestTokenAsync(): CompletableFuture<Token> { ... }
+fun createPostAsync(token: Token, item: Item): CompletableFuture<Post> { ... }
+fun processPost(post: Post) { ... }
+fun postItem(item: Item) {
+	requestTokenAsync()
+        .thenCompose { token -> createPostAsync(token, item) }
+        .thenAccept { post -> processPost(post) }
+        .exceptionally { e ->
+		e.printStackTrace()
                 null
             }
-		}
-		
+	}
+```	
 * RX 方式
-	
-		fun requestToken(): Token { ... }
-		fun createPost(token: Token, item: Item): Post { ... }
-		fun processPost(post: Post) { ... }
-		fun postItem(item: Item) {
-    			Single.fromCallable { requestToken() }
-            	.map { token -> createPost(token, item) }
-            	.subscribe(
-                    { post -> processPost(post) }, // onSuccess
+
+```kotlin	
+fun requestToken(): Token { ... }
+fun createPost(token: Token, item: Item): Post { ... }
+fun processPost(post: Post) { ... }
+fun postItem(item: Item) {
+	Single.fromCallable { requestToken() }
+        .map { token -> createPost(token, item) }
+        .subscribe({ post -> processPost(post) }, // onSuccess
                     { e -> e.printStackTrace() } // onError)
-		}
+	}
 		
 * kotlin 协程
 	
-	
-		suspend fun requestToken(): Token { ... }   // 挂起函数
-		suspend fun createPost(token: Token, item: Item): Post { ... }  // 挂起函数
-		fun processPost(post: Post) { ... }
-		fun postItem(item: Item) {
-  			GlobalScope.launch {
-        			val token = requestToken()
-        			val post = createPost(token, item)
-        			processPost(post)
-        		// 需要异常处理，直接加上 try/catch 语句即可
-    			}
-		}
-		
+```kotlin
+suspend fun requestToken(): Token { ... }   // 挂起函数
+suspend fun createPost(token: Token, item: Item): Post { ... }  // 挂起函数
+fun processPost(post: Post) { ... }
+fun postItem(item: Item) {
+	GlobalScope.launch {
+		val token = requestToken()
+		val post = createPost(token, item)
+		processPost(post)
+		// 需要异常处理，直接加上 try/catch 语句即可
+    	}
+}
+```		
 使用协程后的代码非常简洁，以顺序的方式书写异步代码，不会阻塞当前 UI 线程，错误处理也和平常代码一样简单。
 
 ### kotlin中的协程
@@ -179,37 +183,38 @@ launch函数定义如果不指定CoroutineDispatcher或者没有其他的Continu
 	CoroutineScope.launch函数属于协程构建器 Coroutine builders，Kotlin 中还有其他几种 Builders，负责创建协程。
 	
 	1. CoroutineScope.launch {}：是最常用的 Coroutine builders，不阻塞当前线程，在后台创建一个新协程，也可以指定协程调度器，例如在 Android 中常用的GlobalScope.launch(Dispatchers.Main) {}。
-			
-		fun postItem(item: Item) {
-   			 GlobalScope.launch(Dispatchers.Main) { // 在 UI 线程创建一个新协程
-        	 	val token = requestToken()
-        	 	val post = createPost(token, item)
-        	 	processPost(post)
-    		}
-		}
-		
+```kotlin		
+fun postItem(item: Item) {
+	GlobalScope.launch(Dispatchers.Main) { // 在 UI 线程创建一个新协程
+		val token = requestToken()
+        	val post = createPost(token, item)
+        	processPost(post)
+    	}
+}
+```	
 	2. runBlocking {}:是创建一个新的协程同时阻塞当前线程，直到协程结束。这个不应该在协程中使用，主要是为main函数和测试设计的。
 	
 	3. withContext {}:不会创建新的协程，在指定协程上运行挂起代码块，并挂起该协程直至代码块运行完成.
-	     
-	     fun login(userName: String, passWord: String) {
-        	launch {
-            	val response = withContext(Dispatchers.IO) { repository.login(userName, passWord) }
+```kotlin   
+fun login(userName: String, passWord: String) {
+	launch {
+		val response = withContext(Dispatchers.IO) { repository.login(userName, passWord) }
             	executeResponse(response, { mLoginUser.value = response.data }, { errMsg.value =response.errorMsg })
-        	}
-    	}
-    	
+	}
+}
+``` 	
    4. async {}: CoroutineScope.async {}可以实现与 launch builder 一样的效果，在后台创建一个新协程，唯一的区别是它有返回值，因为CoroutineScope.async {}返回的是 Deferred 类型。
    
-       		
-       		GlobalScope.launch(Dispatchers.IO) {
-           	 	//Coroutine context is inherited from a [CoroutineScope], additional context elements can be specified with [context] argument.
-            	val result = async {
-                	delay(2000)
-            	}.await()
-            	show(result)
-        	}
- 	获取CoroutineScope.async {}的返回值需要通过await()函数，它也是是个挂起函数，调用时会挂起当前协程直到 async 中代码执行完并返回某个值。
+```kotlin  
+GlobalScope.launch(Dispatchers.IO) {
+//Coroutine context is inherited from a [CoroutineScope], additional context elements can be specified with [context] argument.
+	val result = async {
+		delay(2000)
+        }.await()
+        show(result)
+}
+```
+获取CoroutineScope.async {}的返回值需要通过await()函数，它也是是个挂起函数，调用时会挂起当前协程直到 async 中代码执行完并返回某个值。
  整个体系大概是这个样子的:<br>
  
  ![MacDown logo](./协程.png)
@@ -443,7 +448,7 @@ suspend fun <T> Call<T>.await(): T = suspendCoroutine { cont ->
 上面的await()的扩展函数调用时，首先会挂起当前协程，然后执行enqueue将网络请求放入队列中，当请求成功时，通过cont.resume(response.body()!!)来恢复之前的协程。
 
 
-4. 协程关系
+4. **协程关系**
 
 在job的源码中有这样一段注释
 ![MacDown logo](./8.png)
@@ -483,8 +488,8 @@ internal fun initParentJobInternal(parent: Job?) {
 可以看到最关键的流程是`parent.attachChild`
 	
 ```kotlin
-	@Suppress("OverridingDeprecatedMember")
-    public final override fun attachChild(child: ChildJob): ChildHandle {
+@Suppress("OverridingDeprecatedMember")
+public final override fun attachChild(child: ChildJob): ChildHandle {
         /*
          * Note: This function attaches a special ChildHandleNode node object. This node object
          * is handled in a special way on completion on the coroutine (we wait for all of them) and
@@ -495,7 +500,7 @@ internal fun initParentJobInternal(parent: Job?) {
          * cancellation, but parent *will* wait for that child before completion and will handle its exception.
          */
         return invokeOnCompletion(onCancelling = true, handler = ChildHandleNode(this, child).asHandler) as ChildHandle
-    }
+}
 
 ```
 invokeOnCompletion()方法如下：
@@ -666,9 +671,9 @@ private fun tryMakeCompleting(state: Any?, proposedUpdate: Any?, mode: Int): Int
 当发生异常的时候会调用`notifyCancelling`方法
 	 
 ```kotlin
-	private fun notifyCancelling(list: NodeList, cause: Throwable) {
-        // first cancel our own children
-        onCancelling(cause)
+private fun notifyCancelling(list: NodeList, cause: Throwable) {
+	 // first cancel our own children
+	onCancelling(cause)
         notifyHandlers<JobCancellingNode<*>>(list, cause)
         // then cancel parent
         cancelParent(cause) // tentative cancellation -- does not matter if there is no parent
@@ -678,7 +683,7 @@ private fun tryMakeCompleting(state: Any?, proposedUpdate: Any?, mode: Int): Int
 会通知`cancelParent`
 	 
 ```kotlin
-	private fun cancelParent(cause: Throwable): Boolean {
+private fun cancelParent(cause: Throwable): Boolean {
         // CancellationException is considered "normal" and parent is not cancelled when child produces it.
         // This allow parent to cancel its children (normally) without being cancelled itself, unless
         // child crashes and produce some other exception during its completion.
