@@ -1,4 +1,4 @@
-# 编译Cronet及其在Android中的使用\
+# 编译Cronet及其在Android中的使用
 
 之前在看HTTP3.0-QUIK协议，了解到它的强大后迫不及待的想体验一下QUIC协议在Android上的应用，一番搜索之后发现Cronet库支持QUIC协议，所以打算使用它来进行QUIC协议的使用。
 
@@ -48,23 +48,23 @@ dependencies {
 
 #### 安装设置**depot_tools**
 
-```
+```shell
 git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git
 ```
 
 设置环境变量
 
-```
+```shell
 export PATH="$PATH:depot_tools的path"
 ```
 
 
 #### **拉取代码**
 
-```
+```shell
 mkdir ~/chromium && cd ~/chromium
 ```
-```
+```shell
 fetch --nohooks android
 ```
 这里可能要花很长时间因为包很大的(还好我用的是谷歌云海外机器，网速峰值能达到60M 均值也在30M左右，羡慕)。
@@ -75,7 +75,7 @@ fetch --nohooks android
 
 当下载结束后会产生一个隐藏文件 .gclient 和 一个src的文件夹，
 
-```
+```shell
 cd src
 ```
 
@@ -92,13 +92,13 @@ gclient sync
 ```
 当代码同步结束后
 
-```
+```shell
 build/install-build-deps-android.sh
 ```
 
 当install-build-deps至少执行一次成功之后，执行
 
-```
+```shell
 gclient runhooks
 ```
 
@@ -110,7 +110,7 @@ gclient runhooks
 
 我们首先使用 `gn` 生成ninja 文件
 
-```
+```shell
 ./components/cronet/tools/cr_cronet.py gn --out_dir=out/Cronet
 ```
 
@@ -118,7 +118,7 @@ gclient runhooks
 
 以上默认是debug模式的库，如果要生成release的库则应该如下：
 
-```
+```shell
 ./components/cronet/tools/cr_cronet.py gn --release
 ```
 
@@ -126,7 +126,7 @@ gclient runhooks
 
 然后使用ninja进行编译
 
-```
+```shell
 ninja -C out/Cronet cronet_package
 ```
 其中out/Cronet 是生成的相应的问题夹，比如release模式下则为ninja -C out/Release cronet_package
@@ -146,14 +146,14 @@ ninja -C out/Cronet cronet_package
 
 #### 1. 创建和配置CronetEngine的实例
 
-```
+```kotlin
 val myBuilder = CronetEngine.Builder(context)
 val cronetEngine: CronetEngine = myBuilder.build()
 ```
 
 #### 2. 实现请求回调
 
-```
+```kotlin
 class MyUrlRequestCallback : UrlRequest.Callback() {
 	
 	override fun onResponseStarted(request: UrlRequest?, info: UrlResponseInfo?) {
@@ -202,7 +202,7 @@ class MyUrlRequestCallback : UrlRequest.Callback() {
 
 #### 3. 创建请求
 
-```
+```kotlin
 val executor: Executor = Executors.newSingleThreadExecutor()
 
 val requestBuilder = cronetEngine.newUrlRequestBuilder(
@@ -221,7 +221,7 @@ request.start()
 
 我们可以拦截OkHTTP的请求然后将请求交给Cronet来执行请求
 
-```
+```kotlin
 class QUICInterceptor: Interceptor {
 	if (!QUICDroid.enable) {
        return chain.proceed(chain.request())
@@ -241,7 +241,7 @@ class QUICInterceptor: Interceptor {
 
 为了验证QUIC协议比HTTP2.0性能更好，我分别使用**Cronet开启QUIC协议** VS **使用http2.0** 来下载同样的16张图片，由于QUIC协议必须服务端也支持，所以目前使用的图片是同时提供QUIC和HTTP2.0支持的腾讯云CDN图片进行下载测试。
 
-```
+```kotlin
     private val IMGS = arrayOf(
         "https://stgwhttp2.kof.qq.com/1.jpg",
         "https://stgwhttp2.kof.qq.com/2.jpg",
@@ -270,7 +270,7 @@ class QUICInterceptor: Interceptor {
 
 首先我们要开启QUIC协议
 
-```
+```kotlin
 CronetEngine.Builder(applicationContext)
             .enableQuic(true)
             .build()
